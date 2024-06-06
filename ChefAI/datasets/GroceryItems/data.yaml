@@ -1,0 +1,13 @@
+train: ../train/images
+val: ../valid/images
+test: ../test/images
+
+nc: 56
+names: ['-', 'Apple', 'Artichoke', 'Asparagus', 'Avocado', 'Banana', 'Beans', 'Blackberries', 'Blueberries', 'Book', 'Broccoli', 'Brussel Sprouts', 'Butter', 'Cabbage', 'Cantaloupe', 'Carrots', 'Cauliflower', 'Cerealbox', 'Cheese', 'Clementine', 'Coffee', 'Corn', 'Cucumber', 'Detergent', 'Drinks', 'Egg', 'Eggplant', 'Eggs', 'Fish', 'Galia', 'Grapes', 'Honeydew', 'Juice', 'Lettuce', 'Meat', 'Milk', 'Mushroom', 'Mushrooms', 'Nectarine', 'Orange', 'Oranges', 'Pineapple', 'Plum', 'Pomegranate', 'Raspberries', 'Salad', 'Sauce', 'Spinach', 'Squash', 'Strawberries', 'Strawberry', 'Tofu', 'Tomatoes', 'Watermelon', 'Yogurt', 'Zucchini']
+
+roboflow:
+  workspace: testworkspace-lkgpm
+  project: groceryitems-mhbyk
+  version: 1
+  license: MIT
+  url: https://universe.roboflow.com/testworkspace-lkgpm/groceryitems-mhbyk/dataset/1
