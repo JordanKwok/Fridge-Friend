@@ -1,0 +1,14 @@
+{
+  "name": "capstone_ui",
+  "version": "1.0.0",
+  "description": "Web app for AI fridge",
+  "main": "script.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Jordan Kwok",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^4.19.2"
+  }
+}

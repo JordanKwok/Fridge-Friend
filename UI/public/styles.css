@@ -1,0 +1,96 @@
+body {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 250vh;
+  background-image: url("food_background.jpg");
+  background-size: cover;
+}
+
+.container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100vh; /* Set container height to match viewport height */
+  position: relative;
+}
+
+.square {
+  position: relative;
+  height: 400px;
+  width: 700px;
+  background-color: #000000;
+  opacity: 0.8;
+  border-radius: 20px;
+  display: flex;
+  flex-direction: column;
+  font-family: 'Helvetica', sans-serif;
+  align-items: center; /* Center horizontally within .container */
+  justify-content: center; /* Center vertically within .container */
+  text-align: center;
+  color: white;
+  top: -75%; /*Vertically centers the Title box on the first page*/
+}
+
+#title {
+  margin-bottom: 20px;
+  font-size: 80px;
+}
+
+#description {
+  font-size: 16px;
+}
+
+#learnMoreButton {
+  padding: 10px 15px;
+  font-size: 12px;
+  font-family: 'Helvetica', sans-serif;
+  cursor: pointer;
+  border-radius: 20px;
+  margin-top: 20px;
+}
+
+#learnMoreButton:hover {
+  transform: scale(1.2); /* Scale up the button when hovered over */
+}
+
+.invisible-button {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  padding: 10px 15px;
+  font-size: 16px;
+  font-family: 'Helvetica', sans-serif;
+  cursor: pointer;
+  color: white;
+  border: none;
+  background: none;
+  z-index: 2;
+}
+
+#aboutButton {
+  right: 150px;
+}
+
+#productsButton {
+  /* Alignment */
+  position: absolute;
+  align-self: center;
+  height: 400px;
+  width: 200px;
+  top: 125%; /*Vertically centers the Title box on the first page*/
+  /* Text */
+  padding: 10px 15px;
+  font-size: 20px;
+  font-family: 'Helvetica', sans-serif;
+  color: white;
+  cursor: pointer;
+  /* Button Appearance */
+  border-radius: 20px;
+  background-color: rgba(0, 0, 0, 0.8);
+}
+
+#productsButton:hover {
+  transform: scale(1.2); /* Scale up the button when hovered over */
+}
