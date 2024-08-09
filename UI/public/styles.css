@@ -12,7 +12,7 @@ body {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  height: 100vh; /* Set container height to match viewport height */
+  height: 100vh; 
   position: relative;
 }
 
@@ -26,11 +26,11 @@ body {
   display: flex;
   flex-direction: column;
   font-family: 'Helvetica', sans-serif;
-  align-items: center; /* Center horizontally within .container */
-  justify-content: center; /* Center vertically within .container */
+  align-items: center;
+  justify-content: center;
   text-align: center;
   color: white;
-  top: -75%; /*Vertically centers the Title box on the first page*/
+  top: -75%; 
 }
 
 #title {
@@ -52,7 +52,7 @@ body {
 }
 
 #learnMoreButton:hover {
-  transform: scale(1.2); /* Scale up the button when hovered over */
+  transform: scale(1.2); 
 }
 
 .invisible-button {
@@ -73,46 +73,40 @@ body {
   right: 150px;
 }
 
-/* Products Button */
 #productsButton {
-  /* Alignment */
   position: absolute;
   align-self: center;
   height: 400px;
   width: 200px;
   top: 125%;
   
-  /* Remove text and padding */
   padding: 0;
   font-size: 0;
   color: transparent;
   
-  /* Button Appearance */
   border: none;
-  border-radius: 0; /* Ensure no border-radius */
-  background-image: url("images/my_ingredients_button.JPG"); /* Replace with your image path */
+  border-radius: 0; 
+  background-image: url("images/my_ingredients_button.JPG"); 
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
   cursor: pointer;
 }
 
-
 #productsButton:hover {
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
   border: none;
-  transform: scale(1.2); /* Scale up the button when hovered over */
+  transform: scale(1.2); 
 }
 
-/* Specific styles */
 .home-page {
-  height: 250vh; /* Height for home page */
+  height: 250vh; 
 }
 
 .about-page {
-  height: 100vh; /* Height for about page */
+  height: 100vh; 
 }
 
 .about-square {
@@ -125,18 +119,23 @@ body {
   display: flex;
   flex-direction: column;
   font-family: 'Helvetica', sans-serif;
-  align-items: center; /* Center horizontally within .container */
-  justify-content: center; /* Center vertically within .container */
+  align-items: center; 
+  justify-content: center; 
   text-align: center;
   color: white;
-  /* top: -75%; Vertically centers the Title box on the first page */
+}
+
+.my-ingredients-page {
+  height: auto; 
+  min-height: 100vh;
+  overflow-y: auto; 
 }
 
 #ingredientsList {
   width: 80%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
+  display: grid;
+  gap: 10px;
+  padding: 20px;
 }
 
 .ingredients-container {
@@ -148,13 +147,80 @@ body {
 }
 
 .ingredient-item {
-  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
   background-color: grey;
   color: white;
   padding: 10px;
-  margin: 5px 0;
+  margin: 0;
   text-align: center;
   border-radius: 5px;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
+@media (max-width: 1200px) {
+  #ingredientsList {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 1201px) {
+  #ingredientsList {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+.ingredient-buttons {
+  display: flex;
+  gap: 10px;
+}
+
+.edit-button, .remove-button {
+  padding: 5px 10px;
+  background-color: #007BFF;
+  border: none;
+  border-radius: 5px;
+  color: white;
+  cursor: pointer;
+}
+
+.remove-button {
+  background-color: #FF4D4D;
+}
+
+.edit-button:hover, .remove-button:hover {
+  opacity: 0.8;
+}
+
+.ingredient-checkbox {
+  margin-right: 10px; 
+}
+
+#recipeOutput {
+  max-height: 500px; 
+  width: 90%; 
+  max-width: 800px; 
+  overflow-y: auto; 
+  padding: 20px; 
+  border-top: 2px solid #ccc; 
+  margin-top: 20px; 
+  background-color: #fff; 
+  border-radius: 10px; 
+}
+
+button {
+  padding: 10px 15px;
+  font-size: 12px;  
+  font-family: 'Helvetica', sans-serif;
+  cursor: pointer;
+  border-radius: 20px;
+  margin-top: 20px;
+  background-color: #007BFF; /* Blue background for buttons */
+  color: white;
+  border: none;
+}
+
+button:hover {
+  background-color: #0056b3; /* Darker blue when hovered */
+}
