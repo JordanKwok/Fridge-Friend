@@ -30,6 +30,6 @@ document.addEventListener('DOMContentLoaded', function() {
 document.addEventListener('DOMContentLoaded', function() {
   var learnMoreButton = document.getElementById('contactButton');
   learnMoreButton.addEventListener('click', function() {
-    window.location.href = 'http://localhost:8080/ContactUs.html'; // Replace with your desired URL
+    window.location.href = 'http://localhost:8080/Contact.html'; // Replace with your desired URL
   });
 });

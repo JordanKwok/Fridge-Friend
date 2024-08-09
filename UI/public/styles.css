@@ -73,24 +73,61 @@ body {
   right: 150px;
 }
 
+/* Products Button */
 #productsButton {
   /* Alignment */
   position: absolute;
   align-self: center;
   height: 400px;
   width: 200px;
-  top: 125%; /*Vertically centers the Title box on the first page*/
-  /* Text */
-  padding: 10px 15px;
-  font-size: 20px;
-  font-family: 'Helvetica', sans-serif;
-  color: white;
-  cursor: pointer;
+  top: 125%;
+  
+  /* Remove text and padding */
+  padding: 0;
+  font-size: 0;
+  color: transparent;
+  
   /* Button Appearance */
-  border-radius: 20px;
-  background-color: rgba(0, 0, 0, 0.8);
+  border: none;
+  border-radius: 0; /* Ensure no border-radius */
+  background-image: url("my_ingredients_button.JPG"); /* Replace with your image path */
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  cursor: pointer;
 }
 
+
 #productsButton:hover {
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  border: none;
   transform: scale(1.2); /* Scale up the button when hovered over */
+}
+
+/* Specific styles */
+.home-page {
+  height: 250vh; /* Height for home page */
+}
+
+.about-page {
+  height: 100vh; /* Height for about page */
+}
+
+.about-square {
+  position: relative;
+  height: 400px;
+  width: 700px;
+  background-color: #000000;
+  opacity: 0.8;
+  border-radius: 20px;
+  display: flex;
+  flex-direction: column;
+  font-family: 'Helvetica', sans-serif;
+  align-items: center; /* Center horizontally within .container */
+  justify-content: center; /* Center vertically within .container */
+  text-align: center;
+  color: white;
+  /* top: -75%; Vertically centers the Title box on the first page */
 }
