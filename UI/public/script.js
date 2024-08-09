@@ -1,4 +1,9 @@
 document.addEventListener('DOMContentLoaded', function() {
+  // Clear localStorage on page load
+  localStorage.removeItem('selectedIngredients');
+
+  // Fetch and display ingredients
+  clearCheckboxesOnLoad();
   setInterval(fetchIngredients, 1000);
 
   let selectedIngredients = new Set(JSON.parse(localStorage.getItem('selectedIngredients')) || []);
@@ -70,6 +75,13 @@ document.addEventListener('DOMContentLoaded', function() {
       itemDiv.appendChild(editButton);
       itemDiv.appendChild(removeButton);
       ingredientsList.appendChild(itemDiv);
+    });
+  }
+
+  function clearCheckboxesOnLoad() {
+    const checkboxes = document.querySelectorAll('.ingredient-checkbox');
+    checkboxes.forEach(checkbox => {
+      checkbox.checked = false; 
     });
   }
 
@@ -185,19 +197,31 @@ document.addEventListener('DOMContentLoaded', function() {
 
   function displayRecipe(recipeText) {
     const recipeOutput = document.getElementById('recipeOutput');
-    const recipes = recipeText.split('\n').filter(line => line.trim() !== '');
+    
+    // Clean up any unwanted introductory text
+    let cleanedRecipeText = recipeText.replace(/^(Here are a few recipe ideas you can make with.*?\n\n|There are just a few ideas.*?\n\n|Here some idea.*?\n\n)/s, '');
+    
+    // Ensure that each recipe starts on a new line and is well-formatted
+    const recipes = cleanedRecipeText.split('\n').filter(line => line.trim() !== '');
 
-    recipeOutput.innerHTML = recipes.map(recipe => {
-      const [title, ...instructions] = recipe.split(':');
-      const instructionsText = instructions.join(':').trim();
+    // Add numbering to the first recipe only
+    recipeOutput.innerHTML = recipes.map((recipe, index) => {
+        const [title, ...instructions] = recipe.split(':');
+        const instructionsText = instructions.join(':').trim();
 
-      return `
-        <div class="recipe">
-          <h3>${title.trim()}</h3>
-          <p><strong>Instructions:</strong></p>
-          <p>${instructionsText}</p>
-        </div>
-      `;
+        // Remove "Instructions:" from the beginning and end of the text
+        const formattedInstructions = instructionsText.replace(/^(Instructions:|Instructions:\s*)|(\s*Instructions:)?$/g, '').trim();
+        
+        // Add numbering only to the first recipe
+        const recipeNumber = index === 0 ? '1.' : '';
+
+        return `
+            <div class="recipe">
+                <h3>${recipeNumber} ${title.trim()}</h3>
+                <p><strong>Instructions:</strong></p>
+                <p>${formattedInstructions}</p>
+            </div>
+        `;
     }).join('');
   }
 });
