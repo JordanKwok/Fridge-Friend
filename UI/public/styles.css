@@ -3,7 +3,7 @@ body {
   align-items: center;
   justify-content: center;
   height: 250vh;
-  background-image: url("food_background.jpg");
+  background-image: url("images/food_background.jpg");
   background-size: cover;
 }
 
@@ -90,7 +90,7 @@ body {
   /* Button Appearance */
   border: none;
   border-radius: 0; /* Ensure no border-radius */
-  background-image: url("my_ingredients_button.JPG"); /* Replace with your image path */
+  background-image: url("images/my_ingredients_button.JPG"); /* Replace with your image path */
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
@@ -131,3 +131,30 @@ body {
   color: white;
   /* top: -75%; Vertically centers the Title box on the first page */
 }
+
+#ingredientsList {
+  width: 80%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.ingredients-container {
+  width: 80%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 20px;
+}
+
+.ingredient-item {
+  width: 100%;
+  background-color: grey;
+  color: white;
+  padding: 10px;
+  margin: 5px 0;
+  text-align: center;
+  border-radius: 5px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
