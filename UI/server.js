@@ -1,19 +1,19 @@
+import dotenv from 'dotenv';
+dotenv.config(); // Load environment variables
 import OpenAI from 'openai';
 import express from 'express';
-import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import bodyParser from 'body-parser';
 import fs from 'fs';
 import csvParser from 'csv-parser';
 
-dotenv.config(); // Load environment variables
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-const port = 8080;
+const port = 3000;
 
 // Initialize OpenAI with API key from environment variables
 const openai = new OpenAI({
@@ -119,6 +119,8 @@ app.post('/api/data', (req, res) => {
 
   const ingredient = req.body.ingredient;
   const value = req.body.value;
+  // const quantity = req.body.quantity;
+  let quantity;
 
   const filePath = path.join(__dirname, 'public', 'Ingredients.csv'); // Path to the file
 
@@ -129,21 +131,60 @@ app.post('/api/data', (req, res) => {
       res.status(500).send('Error reading file');
       return;
     }
+    
+    let lines = data.split('\n').filter(Boolean);
 
-    let ingredients = data.split('\n').filter(Boolean); // Split the file into lines and filter out any empty lines
+    let ingredients = [];
+    let quantities = [];
 
-    if (value === "true") {
-      if (!ingredients.includes(ingredient)) {
-        ingredients.push(ingredient); // Add the ingredient to the list if not already present
-        console.log(`Added ingredient ${ingredient}`);
-      }
-    } else if (value === "false") {
-      ingredients = ingredients.filter(i => i !== ingredient); // Remove the ingredient from the list
-      console.log(`Removed ingredient ${ingredient}`);
+    // Iterate through each line, skipping the header
+    lines.slice(1).forEach(line => {
+      let [name, quantity] = line.split(',');
+      ingredients.push(name.trim());
+      quantities.push(parseInt(quantity.trim()));
+    });
+
+  //  console.log(ingredients);
+   // console.log(quantities);
+
+  // Check if the ingredient should be added or its quantity incremented
+  if (value === "true") {
+    const index = ingredients.indexOf(ingredient);
+    if (index === -1) {
+      // Ingredient not found, add it with quantity 1
+      ingredients.push(ingredient);
+      quantities.push(1);
+      console.log(`Added ingredient ${ingredient}`);
+    } else {
+      // Ingredient found, increment its quantity
+      quantities[index] += 1;
+      console.log(`Incremented quantity of ${ingredient}`);
     }
-
+  } else if (value === "false") {
+    const index = ingredients.indexOf(ingredient);
+    if (index !== -1) {
+      // Ingredient found, check its quantity
+      if (quantities[index] <= 1) {
+        // Quantity is 1 or less, remove the ingredient from the list
+        ingredients.splice(index, 1);
+        quantities.splice(index, 1);
+        console.log(`Removed ingredient ${ingredient}`);
+      } else {
+        // Decrement the quantity
+        quantities[index] -= 1;
+        console.log(`Decremented quantity of ${ingredient}`);
+      }
+    }
+  }
+    // console.log('ingredit:' + ingredients.join(','));
+    // console.log('quant:' + quantities.join('\n'));
+    let outputLines = [];
+    outputLines.push('name,quantity');
+    for (let i = 0; i < ingredients.length; i++) {
+      outputLines.push(`${ingredients[i]},${quantities[i]}`);
+    }
     // Join the lines back together and write the file
-    fs.writeFile(filePath, ingredients.join('\n'), 'utf8', (err) => {
+    fs.writeFile(filePath, outputLines.join('\n'), 'utf8', (err) => {
       if (err) {
         console.error('Error writing file:', err);
         res.status(500).send('Error writing file');
@@ -158,6 +199,6 @@ app.post('/api/data', (req, res) => {
 
 
 // Start the server
-app.listen(port, () => {
+app.listen(port, `0.0.0.0`, () => {
   console.log(`Server is running on http://localhost:${port}`);
 });
