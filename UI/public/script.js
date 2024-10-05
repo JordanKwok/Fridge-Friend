@@ -142,20 +142,23 @@ document.addEventListener('DOMContentLoaded', function() {
       });
   });
 
+  // Define the base URL with the desired port
+  const BASE_URL = 'http://localhost:3000/';
+
   document.getElementById('aboutButton')?.addEventListener('click', function() {
-    window.location.href = 'http://localhost:8080/About.html';
+    window.location.href = BASE_URL + 'About.html';
   });
 
   document.getElementById('contactButton')?.addEventListener('click', function() {
-    window.location.href = 'http://localhost:8080/Contact.html';
+    window.location.href = BASE_URL + 'Contact.html';
   });
 
   document.getElementById('productsButton')?.addEventListener('click', function() {
-    window.location.href = 'http://localhost:8080/MyIngredients.html';
+    window.location.href = BASE_URL + 'MyIngredients.html';
   });
 
   document.getElementById('goBackButton')?.addEventListener('click', function() {
-    window.location.href = 'http://localhost:8080/';
+    window.location.href = BASE_URL;
   });
 
   document.getElementById('getRecipeButton')?.addEventListener('click', function() {
