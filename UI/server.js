@@ -39,9 +39,9 @@ function readCSV() {
 
 // Function to write data back to CSV
 function writeCSV(data) {
-  const csvData = data.map(item => `${item.name},${item.quantity}`).join('\n');
+  const csvData = data.map(item => `${item.name},${item.date}`).join('\n');
   try {
-    fs.writeFileSync(csvFilePath, `name,quantity\n${csvData}`);
+    fs.writeFileSync(csvFilePath, `name,date\n${csvData}`);
   } catch (error) {
     console.error('Error writing to CSV file:', error);
   }
@@ -119,7 +119,13 @@ app.post('/api/data', (req, res) => {
 
   const ingredient = req.body.ingredient;
   const value = req.body.value;
-  // const quantity = req.body.quantity;
+
+  // Calculate the current date in YYYY-MM-DD format
+  const currentDate = new Date();
+  const formattedDate = currentDate.toISOString().split('T')[0]; // Format as YYYY-MM-DD
+
+  // Use the current date for adding or removing the ingredient
+  const date = value === "true" ? formattedDate : req.body.date; // Use the formatted date for addition, or the date from the request for removal
   let quantity;
 
   const filePath = path.join(__dirname, 'public', 'Ingredients.csv'); // Path to the file
@@ -135,53 +141,51 @@ app.post('/api/data', (req, res) => {
     let lines = data.split('\n').filter(Boolean);
 
     let ingredients = [];
-    let quantities = [];
+    let dates = [];
 
     // Iterate through each line, skipping the header
     lines.slice(1).forEach(line => {
-      let [name, quantity] = line.split(',');
+      let [name, date] = line.split(',');
       ingredients.push(name.trim());
-      quantities.push(parseInt(quantity.trim()));
+      dates.push(date.trim());
     });
 
-  //  console.log(ingredients);
-   // console.log(quantities);
-
-  // Check if the ingredient should be added or its quantity incremented
+  // Add the ingredient with the current date
   if (value === "true") {
-    const index = ingredients.indexOf(ingredient);
-    if (index === -1) {
-      // Ingredient not found, add it with quantity 1
       ingredients.push(ingredient);
-      quantities.push(1);
+      dates.push(formattedDate);
       console.log(`Added ingredient ${ingredient}`);
-    } else {
-      // Ingredient found, increment its quantity
-      quantities[index] += 1;
-      console.log(`Incremented quantity of ${ingredient}`);
-    }
   } else if (value === "false") {
-    const index = ingredients.indexOf(ingredient);
-    if (index !== -1) {
-      // Ingredient found, check its quantity
-      if (quantities[index] <= 1) {
-        // Quantity is 1 or less, remove the ingredient from the list
-        ingredients.splice(index, 1);
-        quantities.splice(index, 1);
-        console.log(`Removed ingredient ${ingredient}`);
-      } else {
-        // Decrement the quantity
-        quantities[index] -= 1;
-        console.log(`Decremented quantity of ${ingredient}`);
+     // Find all indices of the specified ingredient
+     const indices = ingredients.reduce((acc, curr, index) => {
+      if (curr === ingredient) acc.push(index);
+      return acc;
+    }, []);
+    
+    if (indices.length > 0) {
+      // If the ingredient exists, find the oldest entry
+      let oldestIndex = indices[0]; // Assume the first index is the oldest initially
+      let oldestDate = dates[oldestIndex];
+
+      for (let i = 1; i < indices.length; i++) {
+        const currentIndex = indices[i];
+        if (dates[currentIndex] < oldestDate) {
+          oldestDate = dates[currentIndex];
+          oldestIndex = currentIndex; // Update the index of the oldest entry
+        }
       }
+
+      // Remove the oldest entry
+      ingredients.splice(oldestIndex, 1);
+      dates.splice(oldestIndex, 1); // Also remove the corresponding date
+      console.log(`Removed oldest entry of ingredient ${ingredient} with date ${oldestDate}`);
     }
   }
-    // console.log('ingredit:' + ingredients.join(','));
-    // console.log('quant:' + quantities.join('\n'));
+
     let outputLines = [];
-    outputLines.push('name,quantity');
+    outputLines.push('name,date');
     for (let i = 0; i < ingredients.length; i++) {
-      outputLines.push(`${ingredients[i]},${quantities[i]}`);
+      outputLines.push(`${ingredients[i]},${dates[i]}`);
     }
     // Join the lines back together and write the file
     fs.writeFile(filePath, outputLines.join('\n'), 'utf8', (err) => {

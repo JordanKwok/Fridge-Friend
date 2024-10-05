@@ -32,26 +32,59 @@ document.addEventListener('DOMContentLoaded', function() {
       return;
     }
 
+    // Clear the ingredients list before populating it
     ingredientsList.innerHTML = '';
+
+    // Create a map to aggregate ingredients by name and count them
+    const ingredientCountMap = {};
+
     data.forEach(item => {
+      // If the ingredient name already exists, increment its count
+      if (ingredientCountMap[item.name]) {
+        ingredientCountMap[item.name].count += 1;
+        ingredientCountMap[item.name].dates.push(item.date); // Add the date to the list of dates for that ingredient
+      } else {
+        // If it's a new ingredient, add it to the map with an initial count of 1
+        ingredientCountMap[item.name] = {
+          count: 1,
+          dates: [item.date] // Store the dates for each ingredient
+        };
+      }
+    });
+
+    // Iterate over the aggregated ingredients and display them
+    Object.keys(ingredientCountMap).forEach(name => {
+      const ingredientData = ingredientCountMap[name];
+      const count = ingredientData.count;
+      const dates = ingredientData.dates.join(', '); // Join the dates into a string
+
       const itemDiv = document.createElement('div');
       itemDiv.classList.add('ingredient-item');
 
       const checkbox = document.createElement('input');
       checkbox.type = 'checkbox';
-      checkbox.id = `ingredient-${item.name}`;
+      checkbox.id = `ingredient-${name}`;
       checkbox.classList.add('ingredient-checkbox');
-      checkbox.checked = selectedIngredients.has(item.name);
+      checkbox.checked = selectedIngredients.has(name);
 
       const label = document.createElement('label');
       label.htmlFor = checkbox.id;
-      label.textContent = `${item.name} (${item.quantity || 'N/A'})`;
+      label.textContent = `${name} (${count})`; // Display the ingredient name with the count
+
+      // Add a small button for showing dates
+      const showDatesButton = document.createElement('button');
+      showDatesButton.textContent = 'Show Dates';
+      showDatesButton.classList.add('show-dates-button');
+      showDatesButton.addEventListener('click', function(event) {
+        event.stopPropagation(); // Prevent clicking the entire div
+        alert(`Dates for ${name}: ${dates}`); // Figure out how to display this in a drop down instead of an alert
+      });
 
       checkbox.addEventListener('change', function() {
         if (checkbox.checked) {
-          selectedIngredients.add(item.name);
+          selectedIngredients.add(name);
         } else {
-          selectedIngredients.delete(item.name);
+          selectedIngredients.delete(name);
         }
         localStorage.setItem('selectedIngredients', JSON.stringify(Array.from(selectedIngredients)));
       });
@@ -60,23 +93,29 @@ document.addEventListener('DOMContentLoaded', function() {
       removeButton.textContent = 'X';
       removeButton.classList.add('remove-button');
       removeButton.addEventListener('click', function() {
-        removeIngredient(item.name);
+        removeIngredient(name);
       });
 
       const editButton = document.createElement('button');
       editButton.textContent = 'Edit';
       editButton.classList.add('edit-button');
       editButton.addEventListener('click', function() {
-        editIngredient(item);
+        editIngredient({
+          name: name,
+          dates: ingredientData.dates // You can pass all dates for the ingredient to edit
+        });
       });
 
+      // Append elements to the div
       itemDiv.appendChild(checkbox);
       itemDiv.appendChild(label);
+      itemDiv.appendChild(showDatesButton); // Add the show dates button here
       itemDiv.appendChild(editButton);
       itemDiv.appendChild(removeButton);
       ingredientsList.appendChild(itemDiv);
     });
   }
+
 
   function clearCheckboxesOnLoad() {
     const checkboxes = document.querySelectorAll('.ingredient-checkbox');

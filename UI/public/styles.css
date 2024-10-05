@@ -224,3 +224,34 @@ button {
 button:hover {
   background-color: #0056b3; /* Darker blue when hovered */
 }
+
+.ingredient-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.ingredient-checkbox {
+  margin-right: 10px;
+}
+
+.show-dates-button {
+  padding: 4px 8px;
+  margin-left: 10px;
+  background-color: #056e14;
+  border: none;
+  cursor: pointer;
+}
+
+.show-dates-button:hover {
+  background-color: #056e14;
+}
+
+.edit-button, .remove-button {
+  margin-left: 10px;
+}
+
+label {
+  flex: 1;
+}
