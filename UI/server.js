@@ -81,7 +81,8 @@ app.post('/getRecipe', async (req, res) => {
 });
 
 // Endpoint to remove an ingredient
-app.post('/removeIngredient', async (req, res) => {
+//Need to fix this to search by dates too
+app.post('/removeIngredientDate', async (req, res) => {
   const { name } = req.body;
   try {
     const data = await readCSV();
@@ -96,12 +97,12 @@ app.post('/removeIngredient', async (req, res) => {
 
 // Endpoint to edit an ingredient
 app.post('/editIngredient', async (req, res) => {
-  const { oldName, newName, newQuantity } = req.body;
+  const { oldName, newName } = req.body;
   try {
     const data = await readCSV();
     const updatedData = data.map(item => {
       if (item.name === oldName) {
-        return { name: newName, quantity: newQuantity };
+        return { name: newName};
       }
       return item;
     });
@@ -113,6 +114,14 @@ app.post('/editIngredient', async (req, res) => {
   }
 });
 
+// Function to format the date as "MMM DD, YY"
+function formatDate(date) {
+  const options = { month: 'short', day: '2-digit', year: '2-digit' };
+  const formatted = date.toLocaleDateString('en-US', options).replace(' ', '-'); // Format and remove comma
+  return formatted.replace(', ', '-') ;
+  
+}
+
 app.use(express.json());
 app.post('/api/data', (req, res) => {
   console.log(req.body); // Log the received data
@@ -122,7 +131,7 @@ app.post('/api/data', (req, res) => {
 
   // Calculate the current date in YYYY-MM-DD format
   const currentDate = new Date();
-  const formattedDate = currentDate.toISOString().split('T')[0]; // Format as YYYY-MM-DD
+  const formattedDate = formatDate(currentDate);
 
   // Use the current date for adding or removing the ingredient
   const date = value === "true" ? formattedDate : req.body.date; // Use the formatted date for addition, or the date from the request for removal
