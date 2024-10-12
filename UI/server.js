@@ -1,13 +1,13 @@
-import dotenv from 'dotenv';
-dotenv.config(); // Load environment variables
-import OpenAI from 'openai';
 import express from 'express';
+import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import bodyParser from 'body-parser';
 import fs from 'fs';
 import csvParser from 'csv-parser';
+import sqlite3 from 'sqlite3';
 
+dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -15,13 +15,18 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const port = 3000;
 
-// Initialize OpenAI with API key from environment variables
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY 
+// Connect to SQLite Database
+const dbPath = path.join(__dirname, 'recipes.db');
+const db = new sqlite3.Database(dbPath, (err) => {
+  if (err) {
+    console.error('Error connecting to the database:', err);
+  } else {
+    console.log('Connected to the SQLite database.');
+  }
 });
 
 app.use(express.static('public'));
-app.use(bodyParser.json()); // For parsing application/json
+app.use(bodyParser.json());
 
 const csvFilePath = path.join(__dirname, 'public', 'Ingredients.csv');
 
@@ -52,36 +57,68 @@ app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// Handle button click
-app.post('/clicked', (req, res) => {
-  console.log('LOG: Button Pressed');
-  res.sendStatus(200);
-});
-
 // Handle get recipe request with specific ingredients
 app.post('/getRecipe', async (req, res) => {
   const { ingredients } = req.body;
+  const selectedIngredients = ingredients.split(',').map(ing => ing.trim().toLowerCase());
 
   try {
-    const response = await openai.chat.completions.create({
-      model: "gpt-3.5-turbo",
-      messages: [{ role: "user", content: `What recipes can I make with these ingredients: ${ingredients}?` }]
+    // Query the database for all recipes
+    const db = new sqlite3.Database('recipes.db');
+    db.all('SELECT * FROM recipes', [], (err, rows) => {
+      if (err) {
+        console.error('Error querying the database:', err);
+        res.status(500).send('Error querying the database');
+        return;
+      }
+
+      // Filter recipes based on the ingredients
+      const filteredRecipes = rows
+        .map(recipe => {
+          if (!recipe.ingredients || typeof recipe.ingredients !== 'string') {
+            // Skip if ingredients are missing or not a string
+            return null;
+          }
+
+          try {
+            // Parse the ingredients string into an array
+            const recipeIngredients = JSON.parse(recipe.ingredients.replace(/'/g, '"')).map(ing => ing.toLowerCase());
+            const matchingIngredients = recipeIngredients.filter(ing =>
+              selectedIngredients.some(selected => ing.includes(selected))
+            );
+            const extraIngredients = recipeIngredients.filter(ing =>
+              !selectedIngredients.some(selected => ing.includes(selected))
+            );
+
+            return {
+              ...recipe,
+              recipeIngredients,
+              extraIngredients,
+              matchingIngredientsCount: matchingIngredients.length,
+              extraIngredientsCount: extraIngredients.length
+            };
+          } catch (parseError) {
+            console.error('Error parsing ingredients:', parseError);
+            return null; // Skip this recipe if there's an error
+          }
+        })
+        .filter(recipe => recipe !== null && recipe.matchingIngredientsCount > 0 && recipe.extraIngredientsCount <= 2) // Limit to recipes with matching ingredients and 2 or fewer extra ingredients
+        .sort((a, b) => b.matchingIngredientsCount - a.matchingIngredientsCount); // Sort by the most matching ingredients
+
+      // Limit the result to the top 5 recipes
+      const topRecipes = filteredRecipes.slice(0, 5);
+
+      res.json({ recipes: topRecipes });
     });
-
-    // Clean up the response text
-    const recipeText = response.choices[0].message.content
-      .replace(/^\d+\.\s*/, '')  // Remove numbering (e.g., "1. ")
-      .replace(/\nInstructions:\n/, ''); // Remove extra "Instructions" label if present
-
-    res.json({ recipe: recipeText.trim() });
   } catch (error) {
-    console.error('Error making API request:', error);
-    res.status(500).send('Error making API request');
+    console.error('Error processing request:', error);
+    res.status(500).send('Error processing request');
   }
 });
 
-// Endpoint to remove an ingredient
-//Need to fix this to search by dates too
+
+
+// Endpoint to remove an ingredient (including date handling)
 app.post('/removeIngredientDate', async (req, res) => {
   const { name } = req.body;
   try {
@@ -102,7 +139,7 @@ app.post('/editIngredient', async (req, res) => {
     const data = await readCSV();
     const updatedData = data.map(item => {
       if (item.name === oldName) {
-        return { name: newName};
+        return { name: newName };
       }
       return item;
     });
@@ -117,86 +154,67 @@ app.post('/editIngredient', async (req, res) => {
 // Function to format the date as "MMM DD, YY"
 function formatDate(date) {
   const options = { month: 'short', day: '2-digit', year: '2-digit' };
-  const formatted = date.toLocaleDateString('en-US', options).replace(' ', '-'); // Format and remove comma
-  return formatted.replace(', ', '-') ;
-  
+  return date.toLocaleDateString('en-US', options).replace(' ', '-').replace(', ', '-');
 }
 
 app.use(express.json());
 app.post('/api/data', (req, res) => {
-  console.log(req.body); // Log the received data
-
   const ingredient = req.body.ingredient;
   const value = req.body.value;
 
-  // Calculate the current date in YYYY-MM-DD format
   const currentDate = new Date();
   const formattedDate = formatDate(currentDate);
 
-  // Use the current date for adding or removing the ingredient
-  const date = value === "true" ? formattedDate : req.body.date; // Use the formatted date for addition, or the date from the request for removal
-  let quantity;
+  const filePath = path.join(__dirname, 'public', 'Ingredients.csv');
 
-  const filePath = path.join(__dirname, 'public', 'Ingredients.csv'); // Path to the file
-
-  // Read the file asynchronously
   fs.readFile(filePath, 'utf8', (err, data) => {
     if (err) {
       console.error('Error reading file:', err);
       res.status(500).send('Error reading file');
       return;
     }
-    
-    let lines = data.split('\n').filter(Boolean);
 
+    let lines = data.split('\n').filter(Boolean);
     let ingredients = [];
     let dates = [];
 
-    // Iterate through each line, skipping the header
     lines.slice(1).forEach(line => {
       let [name, date] = line.split(',');
       ingredients.push(name.trim());
       dates.push(date.trim());
     });
 
-  // Add the ingredient with the current date
-  if (value === "true") {
+    if (value === "true") {
       ingredients.push(ingredient);
       dates.push(formattedDate);
-      console.log(`Added ingredient ${ingredient}`);
-  } else if (value === "false") {
-     // Find all indices of the specified ingredient
-     const indices = ingredients.reduce((acc, curr, index) => {
-      if (curr === ingredient) acc.push(index);
-      return acc;
-    }, []);
-    
-    if (indices.length > 0) {
-      // If the ingredient exists, find the oldest entry
-      let oldestIndex = indices[0]; // Assume the first index is the oldest initially
-      let oldestDate = dates[oldestIndex];
+    } else if (value === "false") {
+      const indices = ingredients.reduce((acc, curr, index) => {
+        if (curr === ingredient) acc.push(index);
+        return acc;
+      }, []);
 
-      for (let i = 1; i < indices.length; i++) {
-        const currentIndex = indices[i];
-        if (dates[currentIndex] < oldestDate) {
-          oldestDate = dates[currentIndex];
-          oldestIndex = currentIndex; // Update the index of the oldest entry
+      if (indices.length > 0) {
+        let oldestIndex = indices[0];
+        let oldestDate = dates[oldestIndex];
+
+        for (let i = 1; i < indices.length; i++) {
+          const currentIndex = indices[i];
+          if (dates[currentIndex] < oldestDate) {
+            oldestDate = dates[currentIndex];
+            oldestIndex = currentIndex;
+          }
         }
+
+        ingredients.splice(oldestIndex, 1);
+        dates.splice(oldestIndex, 1);
       }
-
-      // Remove the oldest entry
-      ingredients.splice(oldestIndex, 1);
-      dates.splice(oldestIndex, 1); // Also remove the corresponding date
-      console.log(`Removed oldest entry of ingredient ${ingredient} with date ${oldestDate}`);
     }
-  }
 
-    let outputLines = [];
-    outputLines.push('name,date');
+    let outputLines = ['name,date'];
     for (let i = 0; i < ingredients.length; i++) {
       outputLines.push(`${ingredients[i]},${dates[i]}`);
     }
-    // Join the lines back together and write the file
+
     fs.writeFile(filePath, outputLines.join('\n'), 'utf8', (err) => {
       if (err) {
         console.error('Error writing file:', err);
@@ -204,14 +222,12 @@ app.post('/api/data', (req, res) => {
         return;
       }
 
-      // Send the response after the file has been successfully written
       res.send('Ingredient list updated successfully');
     });
   });
 });
 
-
 // Start the server
-app.listen(port, `0.0.0.0`, () => {
+app.listen(port, '0.0.0.0', () => {
   console.log(`Server is running on http://localhost:${port}`);
 });
