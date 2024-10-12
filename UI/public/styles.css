@@ -248,10 +248,25 @@ button:hover {
   background-color: #056e14;
 }
 
-.edit-button, .remove-button {
+.edit-button{
   margin-left: 10px;
+}
+
+.remove-button {
+  padding: 3px 6px;
+  /* margin-left: 10px; */
+}
+
+.remove-button:hover {
+  background-color: #7a0216; /* Darker red when hovered */
 }
 
 label {
   flex: 1;
+}
+
+.date-box {
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center; /* Aligns the date text and button vertically */
 }

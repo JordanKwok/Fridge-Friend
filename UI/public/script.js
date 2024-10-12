@@ -70,10 +70,11 @@ document.addEventListener('DOMContentLoaded', function() {
         dateBox.textContent = `${date}`;
 
         const dateRemoveButton = document.createElement('button');
+        dateRemoveButton.classList.add('remove-button');
         dateRemoveButton.textContent = 'X';
         dateRemoveButton.classList.add('date-remove-button');
         dateRemoveButton.addEventListener('click', function(event) {
-          event.stopPropagation();
+          // event.stopPropagation();
           removeIngredientDate(name, date);
         });
         dateBox.appendChild(dateRemoveButton);
@@ -81,13 +82,13 @@ document.addEventListener('DOMContentLoaded', function() {
       });
 
       const showDatesButton = document.createElement('button');
-      showDatesButton.textContent = expandedIngredients.has(name) ? 'Hide Dates' : 'Show Dates';
+      showDatesButton.textContent = expandedIngredients.has(name) ? 'Hide' : 'Details';
       showDatesButton.classList.add('show-dates-button');
       showDatesButton.addEventListener('click', function(event) {
         event.stopPropagation();
         const isHidden = datesContainer.style.display === 'none';
         datesContainer.style.display = isHidden ? 'block' : 'none';
-        showDatesButton.textContent = isHidden ? 'Hide Dates' : 'Show Dates';
+        showDatesButton.textContent = isHidden ? 'Hide' : 'Details';
         if (isHidden) {
           expandedIngredients.add(name);
         } else {

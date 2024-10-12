@@ -116,21 +116,46 @@ app.post('/getRecipe', async (req, res) => {
   }
 });
 
-
-
-// Endpoint to remove an ingredient (including date handling)
+// Endpoint to remove a specific ingredient by name and date
 app.post('/removeIngredientDate', async (req, res) => {
-  const { name } = req.body;
-  try {
-    const data = await readCSV();
-    const filteredData = data.filter(item => item.name !== name);
-    writeCSV(filteredData);
-    res.status(200).send('Ingredient removed successfully');
-  } catch (error) {
-    console.error('Error removing ingredient:', error);
-    res.status(500).send('Failed to remove ingredient');
-  }
+  const { ingredient, date } = req.body;
+
+  const filePath = path.join(__dirname, 'public', 'Ingredients.csv');
+
+  fs.readFile(filePath, 'utf8', (err, data) => {
+    if (err) {
+      console.error('Error reading file:', err);
+      return res.status(500).send('Error reading file');
+    }
+
+    let lines = data.split('\n').filter(Boolean);
+    let ingredients = lines.slice(1).map(line => line.split(',')[0].trim());
+    let dates = lines.slice(1).map(line => line.split(',')[1].trim());
+
+    const matchingIndices = ingredients.reduce((acc, name, idx) => {
+      if (name === ingredient && dates[idx] === date) acc.push(idx);
+      return acc;
+    }, []);
+
+    if (matchingIndices.length) {
+      let indexToRemove = matchingIndices[0]; // Only removing the first found match
+      ingredients.splice(indexToRemove, 1);
+      dates.splice(indexToRemove, 1);
+    }
+
+    const updatedData = ['name,date', ...ingredients.map((ing, i) => `${ing},${dates[i]}`)].join('\n');
+
+    fs.writeFile(filePath, updatedData, 'utf8', (err) => {
+      if (err) {
+        console.error('Error writing file:', err);
+        return res.status(500).send('Error writing file');
+      }
+
+      res.send('Ingredient list updated successfully');
+    });
+  });
 });
+
 
 // Endpoint to edit an ingredient
 app.post('/editIngredient', async (req, res) => {
