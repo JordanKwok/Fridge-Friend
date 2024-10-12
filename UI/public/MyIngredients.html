@@ -41,7 +41,7 @@
       align-items: center;
       z-index: 1000;
     }
-    .go-back-icon {
+    .go-back-icon, .notification-icon, .add-icon {
       width: 40px;
       height: 40px;
     }
@@ -65,12 +65,49 @@
       margin-left: 10px;
       background-color: red;        /* Add some space between the date and the button */
     }
+    /* Notification Button */
+    .notification-button {
+      position: fixed;
+      top: 10px;
+      right: 10px;
+      background-color: transparent;
+      border: none;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      z-index: 1000;
+    }
+
+    /* Add Button */
+    .add-button {
+      position: fixed;
+      top: 10px;
+      right: 100px;
+      background-color: transparent;
+      border: none;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      z-index: 1000;
+    }
   </style>
 </head>
 <body class="my-ingredients-page">
   <button id="goBackButton" class="go-back-button">
     <img src="images/back_arrow.png" alt="Go Back" class="go-back-icon">
     <span class="go-back-text">GO BACK</span>
+  </button>
+
+  <button id="notificationButton" class="notification-button">
+    <img src="images/notification.png" class="notification-icon">
+    <span class="go-back-text">NOTIFY ME</span>
+  </button>
+
+  <button id="addButton" class="add-button">
+    <img src="images/add_icon.png" class="add-icon">
+    <span class="go-back-text">ADD INGREDIENT</span>
   </button>
 
   <div class="container">
