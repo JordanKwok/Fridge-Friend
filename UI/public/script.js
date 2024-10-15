@@ -1,7 +1,13 @@
 document.addEventListener('DOMContentLoaded', function() {
+  const notificationBell = document.getElementById('notificationBell');
+  const notificationSound = document.getElementById('notificationSound');
+  const dropdownMenu = document.getElementById('notificationDropdown');
+  let notificationSoundPlayed = false;
+  
   localStorage.removeItem('selectedIngredients');
   let selectedIngredients = new Set(JSON.parse(localStorage.getItem('selectedIngredients')) || []);
   let expandedIngredients = new Set(JSON.parse(localStorage.getItem('expandedIngredients')) || []);
+  
   setInterval(fetchIngredients, 1000);
 
   function fetchIngredients() {
@@ -12,6 +18,7 @@ document.addEventListener('DOMContentLoaded', function() {
           header: true,
           complete: function(results) {
             displayIngredients(results.data);
+            checkForExpiringItems(results.data); // Call the expiration check function
           },
           error: function(error) {
             console.error('Error parsing CSV:', error);
@@ -21,7 +28,7 @@ document.addEventListener('DOMContentLoaded', function() {
       .catch(error => console.error('Error fetching CSV:', error));
   }
 
-  function displayIngredients(data) {
+function displayIngredients(data) {
     const ingredientsList = document.getElementById('ingredientsList');
     if (!ingredientsList) {
       console.error('Element with ID "ingredientsList" not found.');
@@ -31,21 +38,25 @@ document.addEventListener('DOMContentLoaded', function() {
     const ingredientCountMap = {};
 
     data.forEach(item => {
+      // Ensure 'best_before_date' field is captured and displayed
       if (ingredientCountMap[item.name]) {
         ingredientCountMap[item.name].count += 1;
         ingredientCountMap[item.name].dates.push(item.date);
+        ingredientCountMap[item.name].bestBeforeDates.push(item.best_before_date);  // Store best-before dates
       } else {
         ingredientCountMap[item.name] = {
           count: 1,
-          dates: [item.date]
+          dates: [item.date],
+          bestBeforeDates: [item.best_before_date]  // Initialize best-before dates
         };
       }
     });
-
+    
     Object.keys(ingredientCountMap).forEach(name => {
       const ingredientData = ingredientCountMap[name];
       const count = ingredientData.count;
       const dates = ingredientData.dates;
+      const bestBeforeDates = ingredientData.bestBeforeDates;  // Access best-before dates
 
       const itemDiv = document.createElement('div');
       itemDiv.classList.add('ingredient-item');
@@ -64,18 +75,18 @@ document.addEventListener('DOMContentLoaded', function() {
       datesContainer.classList.add('dates-container');
       datesContainer.style.display = expandedIngredients.has(name) ? 'block' : 'none';
 
-      dates.forEach((date) => {
+      // Display each date and its corresponding best-before date
+      dates.forEach((date, index) => {
         const dateBox = document.createElement('div');
         dateBox.classList.add('date-box');
-        dateBox.textContent = `${date}`;
+        dateBox.textContent = `Entry Date: ${date} | Best Before: ${bestBeforeDates[index]}`;  // Display both dates
 
         const dateRemoveButton = document.createElement('button');
         dateRemoveButton.classList.add('remove-button');
         dateRemoveButton.textContent = 'X';
         dateRemoveButton.classList.add('date-remove-button');
         dateRemoveButton.addEventListener('click', function(event) {
-          // event.stopPropagation();
-          removeIngredientDate(name, date);
+          removeIngredientDate(name, date);  // Remove specific date
         });
         dateBox.appendChild(dateRemoveButton);
         datesContainer.appendChild(dateBox);
@@ -124,6 +135,59 @@ document.addEventListener('DOMContentLoaded', function() {
       itemDiv.appendChild(editButton);
       ingredientsList.appendChild(itemDiv);
     });
+}
+
+// Check if the elements exist before interacting with them
+  if (notificationBell && notificationSound && dropdownMenu) {
+
+    // Check for items that are near expiration or expired
+    function checkForExpiringItems(data) {
+      const today = new Date();
+      const expiringItems = [];
+
+      data.forEach(item => {
+        const entryDate = new Date(item.date);
+        const bestBeforeDate = new Date(item.best_before_date); // Assuming your CSV has a 'best_before_date' field
+
+        const timeDiff = bestBeforeDate - today;
+        const daysDiff = Math.ceil(timeDiff / (1000 * 3600 * 24)); // Convert time difference to days
+
+        // If the item is expiring in 3 days or less or is expired
+        if (daysDiff <= 3 && daysDiff >= 0) {
+          expiringItems.push(`${item.name} (Expires in ${daysDiff} days)`);
+        } else if (daysDiff < 0) {
+          expiringItems.push(`${item.name} (Expired ${Math.abs(daysDiff)} days ago)`);
+        }
+      });
+
+      if (expiringItems.length > 0) {
+        // Show exclamation mark, play sound, and populate dropdown
+        notificationBell.classList.add('has-notifications');
+        // Play notification sound only once
+		if (!notificationSoundPlayed) {
+        notificationSound.play();
+        notificationSoundPlayed = true;  // Set to true after playing the sound
+		}
+        showDropdown(expiringItems);
+      } else {
+        // Hide exclamation mark if no notifications
+        notificationBell.classList.remove('has-notifications');
+        dropdownMenu.innerHTML = ''; // Clear dropdown
+      }
+    }
+
+    // Show the dropdown with expiring items
+    function showDropdown(items) {
+      dropdownMenu.innerHTML = items.map(item => `<li>${item}</li>`).join('');
+    }
+
+    // Toggle dropdown visibility when the bell is clicked
+    notificationBell.addEventListener('click', function() {
+      dropdownMenu.classList.toggle('show');
+    });
+
+  } else {
+    console.error('Notification elements not found in the DOM.');
   }
 
   function removeIngredientDate(ingredientName, date) {
@@ -177,6 +241,29 @@ document.addEventListener('DOMContentLoaded', function() {
     `).join('');
   }
 
+  // Functionality for the Add Items button
+  document.getElementById('addButton')?.addEventListener('click', function() {
+    const ingredientName = prompt('Enter the ingredient name:');
+    const ingredientDate = prompt('Enter the entry date (Month-DD-YY):');
+
+    if (ingredientName && ingredientDate) {
+      fetch('/addIngredient', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: ingredientName, date: ingredientDate }),
+      })
+      .then(response => {
+        if (response.ok) {
+          alert('Ingredient added successfully.');
+          fetchIngredients(); // Refresh ingredients list
+        } else {
+          alert('Failed to add ingredient.');
+        }
+      })
+      .catch(error => console.error('Error adding ingredient:', error));
+    }
+  });
+
   // Additional event listeners for navigation buttons
   document.getElementById('learnMoreButton')?.addEventListener('click', function(e) {
     fetch('/clicked', { method: 'POST' })
@@ -193,7 +280,6 @@ document.addEventListener('DOMContentLoaded', function() {
         console.log(error);
       });
   });
-
 
   const BASE_URL = 'http://localhost:3000/';
 

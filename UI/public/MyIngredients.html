@@ -55,15 +55,15 @@
       display: none;
     }
     .date-box {
-      display: flex;              /* Use flexbox to align items horizontally */
-      justify-content: space-between; /* Ensure space between date and button */
-      align-items: center;        /* Align the date and the button in the center vertically */
-      padding: 2px 0;             /* Add some padding to the date box */
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 2px 0;
     }
 
     .date-remove-button {
       margin-left: 10px;
-      background-color: red;        /* Add some space between the date and the button */
+      background-color: red;
     }
     /* Notification Button */
     .notification-button {
@@ -77,6 +77,30 @@
       flex-direction: column;
       align-items: center;
       z-index: 1000;
+    }
+
+    .notification-icon.has-notifications {
+      border: 2px solid red;
+    }
+
+    /* Dropdown for notifications */
+    .dropdown-menu {
+      position: fixed;
+      top: 60px;
+      right: 10px;
+      background-color: white;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+      list-style-type: none;
+      padding: 10px;
+      display: none;
+      z-index: 1001;
+    }
+    .dropdown-menu.show {
+      display: block;
+    }
+    .dropdown-menu li {
+      margin-bottom: 5px;
     }
 
     /* Add Button */
@@ -100,8 +124,8 @@
     <span class="go-back-text">GO BACK</span>
   </button>
 
-  <button id="notificationButton" class="notification-button">
-    <img src="images/notification.png" class="notification-icon">
+  <button id="notificationBell" class="notification-button">
+    <img src="images/notification.png" class="notification-icon" alt="Notification Bell">
     <span class="go-back-text">NOTIFY ME</span>
   </button>
 
@@ -109,6 +133,12 @@
     <img src="images/add_icon.png" class="add-icon">
     <span class="go-back-text">ADD INGREDIENT</span>
   </button>
+
+  <!-- Dropdown for showing notifications -->
+  <ul id="notificationDropdown" class="dropdown-menu"></ul>
+
+  <!-- Sound element for the notification -->
+  <audio id="notificationSound" src="ding.wav" preload="auto"></audio>
 
   <div class="container">
     <div id="ingredientsList" class="ingredients-container"></div>

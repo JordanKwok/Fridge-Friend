@@ -176,6 +176,30 @@ app.post('/editIngredient', async (req, res) => {
   }
 });
 
+// Endpoint to add a new ingredient
+app.post('/addIngredient', (req, res) => {
+  const { name, date } = req.body;
+  const filePath = path.join(__dirname, 'public', 'Ingredients.csv');
+
+  fs.readFile(filePath, 'utf8', (err, data) => {
+    if (err) {
+      console.error('Error reading file:', err);
+      return res.status(500).send('Error reading file');
+    }
+
+    const updatedData = data + `\n${name},${date}`;
+    fs.writeFile(filePath, updatedData, 'utf8', (err) => {
+      if (err) {
+        console.error('Error writing to file:', err);
+        return res.status(500).send('Error writing to file');
+      }
+
+      res.status(200).send('Ingredient added successfully');
+    });
+  });
+});
+
+
 // Function to format the date as "MMM DD, YY"
 function formatDate(date) {
   const options = { month: 'short', day: '2-digit', year: '2-digit' };
