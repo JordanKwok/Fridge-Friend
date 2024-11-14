@@ -2,33 +2,72 @@ document.addEventListener('DOMContentLoaded', function() {
   const notificationBell = document.getElementById('notificationBell');
   const notificationSound = document.getElementById('notificationSound');
   const dropdownMenu = document.getElementById('notificationDropdown');
+  const shoppingListButton = document.getElementById('shoppingListButton');
+  const shoppingListDropdown = document.getElementById('shoppingListDropdown');
+
   let notificationSoundPlayed = false;
-  
+
   localStorage.removeItem('selectedIngredients');
   let selectedIngredients = new Set(JSON.parse(localStorage.getItem('selectedIngredients')) || []);
   let expandedIngredients = new Set(JSON.parse(localStorage.getItem('expandedIngredients')) || []);
-  
+
   setInterval(fetchIngredients, 1000);
 
-  function fetchIngredients() {
-    fetch('Ingredients.csv')
-      .then(response => response.text())
-      .then(text => {
-        Papa.parse(text, {
-          header: true,
-          complete: function(results) {
-            displayIngredients(results.data);
-            checkForExpiringItems(results.data); // Call the expiration check function
-          },
-          error: function(error) {
-            console.error('Error parsing CSV:', error);
-          }
-        });
-      })
-      .catch(error => console.error('Error fetching CSV:', error));
-  }
+	function calculateBestBeforeDate(entryDate, shelfLife) {
+	  const date = new Date(entryDate);
+	  date.setDate(date.getDate() + shelfLife);
+	  return date.toLocaleDateString("en-US", { month: "short", day: "2-digit", year: "2-digit" }).replace(' ', '-');
+	}
 
-function displayIngredients(data) {
+	const categoryMap = {
+	  "milk": { category: "Dairy", shelfLife: 7 },
+	  "cheese": { category: "Dairy", shelfLife: 14 },
+	  "yogurt": { category: "Dairy", shelfLife: 14 },
+	  "cream cheese": { category: "Dairy", shelfLife: 14 },
+	  "apple": { category: "Fruits", shelfLife: 5 },
+	  "banana": { category: "Fruits", shelfLife: 5 },
+	  "carrot": { category: "Vegetables", shelfLife: 7 },
+	  "chicken": { category: "Meat", shelfLife: 4 },
+	  "onion": { category: "Vegetables", shelfLife: 7 },
+	  "cabbage": { category: "Vegetables", shelfLife: 7 },
+	  "bacon": { category: "Meat", shelfLife: 14 },
+	  "bread": { category: "Baked Goods", shelfLife: 4 },
+	  "cereal": { category: "Packaged Goods", shelfLife: 30 }
+	  // Add more items as needed
+	};
+
+
+
+  function fetchIngredients() {
+	  fetch('Ingredients.csv')
+		.then(response => response.text())
+		.then(text => {
+		  Papa.parse(text, {
+			header: true,
+			complete: function(results) {
+			  // Automatically update the best_before_date if undefined
+			  results.data.forEach(item => {
+				if (!item.best_before_date || item.best_before_date.trim() === "") {
+				  const category = categoryMap[item.name.toLowerCase()];
+				  if (category) {
+					item.best_before_date = calculateBestBeforeDate(item.date, category.shelfLife);
+				  }
+				}
+			  });
+
+			  displayIngredients(results.data);
+			  checkForExpiringItems(results.data);
+			},
+			error: function(error) {
+			  console.error('Error parsing CSV:', error);
+			}
+		  });
+		})
+		.catch(error => console.error('Error fetching CSV:', error));
+	}
+
+
+  function displayIngredients(data) {
     const ingredientsList = document.getElementById('ingredientsList');
     if (!ingredientsList) {
       console.error('Element with ID "ingredientsList" not found.');
@@ -38,25 +77,24 @@ function displayIngredients(data) {
     const ingredientCountMap = {};
 
     data.forEach(item => {
-      // Ensure 'best_before_date' field is captured and displayed
       if (ingredientCountMap[item.name]) {
         ingredientCountMap[item.name].count += 1;
         ingredientCountMap[item.name].dates.push(item.date);
-        ingredientCountMap[item.name].bestBeforeDates.push(item.best_before_date);  // Store best-before dates
+        ingredientCountMap[item.name].bestBeforeDates.push(item.best_before_date);
       } else {
         ingredientCountMap[item.name] = {
           count: 1,
           dates: [item.date],
-          bestBeforeDates: [item.best_before_date]  // Initialize best-before dates
+          bestBeforeDates: [item.best_before_date]
         };
       }
     });
-    
+
     Object.keys(ingredientCountMap).forEach(name => {
       const ingredientData = ingredientCountMap[name];
       const count = ingredientData.count;
       const dates = ingredientData.dates;
-      const bestBeforeDates = ingredientData.bestBeforeDates;  // Access best-before dates
+      const bestBeforeDates = ingredientData.bestBeforeDates;
 
       const itemDiv = document.createElement('div');
       itemDiv.classList.add('ingredient-item');
@@ -75,18 +113,16 @@ function displayIngredients(data) {
       datesContainer.classList.add('dates-container');
       datesContainer.style.display = expandedIngredients.has(name) ? 'block' : 'none';
 
-      // Display each date and its corresponding best-before date
       dates.forEach((date, index) => {
         const dateBox = document.createElement('div');
         dateBox.classList.add('date-box');
-        dateBox.textContent = `Entry Date: ${date} | Best Before: ${bestBeforeDates[index]}`;  // Display both dates
+        dateBox.textContent = `Entry Date: ${date} | Best Before: ${bestBeforeDates[index]}`;
 
         const dateRemoveButton = document.createElement('button');
         dateRemoveButton.classList.add('remove-button');
         dateRemoveButton.textContent = 'X';
-        dateRemoveButton.classList.add('date-remove-button');
-        dateRemoveButton.addEventListener('click', function(event) {
-          removeIngredientDate(name, date);  // Remove specific date
+        dateRemoveButton.addEventListener('click', function() {
+          removeIngredientDate(name, date);
         });
         dateBox.appendChild(dateRemoveButton);
         datesContainer.appendChild(dateBox);
@@ -95,8 +131,7 @@ function displayIngredients(data) {
       const showDatesButton = document.createElement('button');
       showDatesButton.textContent = expandedIngredients.has(name) ? 'Hide' : 'Details';
       showDatesButton.classList.add('show-dates-button');
-      showDatesButton.addEventListener('click', function(event) {
-        event.stopPropagation();
+      showDatesButton.addEventListener('click', function() {
         const isHidden = datesContainer.style.display === 'none';
         datesContainer.style.display = isHidden ? 'block' : 'none';
         showDatesButton.textContent = isHidden ? 'Hide' : 'Details';
@@ -106,10 +141,6 @@ function displayIngredients(data) {
           expandedIngredients.delete(name);
         }
         localStorage.setItem('expandedIngredients', JSON.stringify(Array.from(expandedIngredients)));
-      });
-
-      datesContainer.addEventListener('click', function(event) {
-        event.stopPropagation();
       });
 
       checkbox.addEventListener('change', function() {
@@ -125,7 +156,7 @@ function displayIngredients(data) {
       editButton.textContent = 'Edit';
       editButton.classList.add('edit-button');
       editButton.addEventListener('click', function() {
-        editIngredient({ name: name });
+        editIngredient({ name });
       });
 
       itemDiv.appendChild(checkbox);
@@ -135,24 +166,17 @@ function displayIngredients(data) {
       itemDiv.appendChild(editButton);
       ingredientsList.appendChild(itemDiv);
     });
-}
+  }
 
-// Check if the elements exist before interacting with them
   if (notificationBell && notificationSound && dropdownMenu) {
-
-    // Check for items that are near expiration or expired
     function checkForExpiringItems(data) {
       const today = new Date();
       const expiringItems = [];
 
       data.forEach(item => {
-        const entryDate = new Date(item.date);
-        const bestBeforeDate = new Date(item.best_before_date); // Assuming your CSV has a 'best_before_date' field
+        const bestBeforeDate = new Date(item.best_before_date);
+        const daysDiff = Math.ceil((bestBeforeDate - today) / (1000 * 3600 * 24));
 
-        const timeDiff = bestBeforeDate - today;
-        const daysDiff = Math.ceil(timeDiff / (1000 * 3600 * 24)); // Convert time difference to days
-
-        // If the item is expiring in 3 days or less or is expired
         if (daysDiff <= 3 && daysDiff >= 0) {
           expiringItems.push(`${item.name} (Expires in ${daysDiff} days)`);
         } else if (daysDiff < 0) {
@@ -161,53 +185,195 @@ function displayIngredients(data) {
       });
 
       if (expiringItems.length > 0) {
-        // Show exclamation mark, play sound, and populate dropdown
         notificationBell.classList.add('has-notifications');
-        // Play notification sound only once
-		if (!notificationSoundPlayed) {
-        notificationSound.play();
-        notificationSoundPlayed = true;  // Set to true after playing the sound
-		}
+        if (!notificationSoundPlayed) {
+          notificationSound.play();
+          notificationSoundPlayed = true;
+        }
         showDropdown(expiringItems);
       } else {
-        // Hide exclamation mark if no notifications
         notificationBell.classList.remove('has-notifications');
-        dropdownMenu.innerHTML = ''; // Clear dropdown
+        dropdownMenu.innerHTML = '';
       }
     }
 
-    // Show the dropdown with expiring items
     function showDropdown(items) {
       dropdownMenu.innerHTML = items.map(item => `<li>${item}</li>`).join('');
     }
 
-    // Toggle dropdown visibility when the bell is clicked
     notificationBell.addEventListener('click', function() {
-      dropdownMenu.classList.toggle('show');
-    });
+		// Toggle the 'show' class for the notification dropdown
+		notificationDropdown.classList.toggle('show');
 
+		// If the notifications dropdown is shown, hide the shopping list dropdown
+		if (notificationDropdown.classList.contains('show')) {
+		  shoppingListDropdown.classList.remove('show');
+		}
+	  });
   } else {
     console.error('Notification elements not found in the DOM.');
   }
 
-  function removeIngredientDate(ingredientName, date) {
-    fetch('/removeIngredientDate', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ingredient: ingredientName, date: date }),
-    })
-    .then(response => response.ok ? fetchIngredients() : console.error('Failed to remove ingredient'))
-    .catch(error => console.error('Error removing ingredient:', error));
+	// Function to remove an ingredient date
+	function removeIngredientDate(name, date) {
+	  fetch('/removeIngredientDate', {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ ingredient: name, date: date })
+	  })
+	  .then(response => {
+		if (response.ok) {
+		  alert('Ingredient removed successfully.');
+		  fetchIngredients(); // Refresh the ingredients list
+		} else {
+		  alert('Failed to remove ingredient.');
+		}
+	  })
+	  .catch(error => console.error('Error removing ingredient:', error));
+	}
+
+	// Function to edit an ingredient
+	function editIngredient({ name }) {
+	  const newName = prompt(`Edit name for ${name}:`, name);
+	  const newDate = prompt('Edit entry date (Month-DD-YY):');
+
+	  if (newName && newDate) {
+		fetch('/editIngredient', {
+		  method: 'POST',
+		  headers: { 'Content-Type': 'application/json' },
+		  body: JSON.stringify({ oldName: name, newName: newName, newDate: newDate })
+		})
+		.then(response => {
+		  if (response.ok) {
+			alert('Ingredient updated successfully.');
+			fetchIngredients(); // Refresh the ingredients list
+		  } else {
+			alert('Failed to update ingredient.');
+		  }
+		})
+		.catch(error => console.error('Error editing ingredient:', error));
+	  }
+	}
+
+	// Helper function to create the status display string
+	function statusDisplay(statusCounts) {
+	  const statuses = [];
+	  if (statusCounts.lowStock > 0) statuses.push(`Low Stock x${statusCounts.lowStock}`);
+	  if (statusCounts.expiringSoon > 0) statuses.push(`Expiring Soon x${statusCounts.expiringSoon}`);
+	  if (statusCounts.expired > 0) statuses.push(`Expired x${statusCounts.expired}`);
+	  return `(${statuses.join(" / ")})`;
+	}
+
+	// Helper function to capitalize the first letter of an item name
+	function capitalize(name) {
+	  return name.charAt(0).toUpperCase() + name.slice(1);
+	}
+
+
+	// Shopping List Logic
+	if (shoppingListButton && shoppingListDropdown) {
+	  shoppingListButton.addEventListener('click', function() {
+		// Toggle the 'show' class to show or hide the shopping list
+		shoppingListDropdown.classList.toggle('show');
+
+		// If the shopping list is shown, hide the notifications dropdown
+		if (shoppingListDropdown.classList.contains('show')) {
+		  notificationDropdown.classList.remove('show');
+		}
+
+		// Generate the shopping list only when the dropdown is shown
+		if (shoppingListDropdown.classList.contains('show')) {
+		  generateShoppingList();
+		}
+	  });
+
+    // Function to generate the shopping list
+	function generateShoppingList() {
+	  shoppingListDropdown.innerHTML = ''; // Clear any previous items
+	  const today = new Date();
+	  const itemsToRestock = {}; // Use an object to store item names and status counts
+
+	  // Fetch and parse the CSV file to populate the shopping list
+	  fetch('Ingredients.csv')
+		.then(response => response.text())
+		.then(text => {
+		  Papa.parse(text, {
+			header: true,
+			complete: function(results) {
+			  console.log('Parsed CSV data:', results.data);
+
+			  // Iterate through the parsed CSV data
+			  results.data.forEach(item => {
+				if (!item.name || !item.date) {
+				  console.warn('Skipping invalid item:', item);
+				  return; // Skip invalid items
+				}
+
+				// Convert the item name to lowercase for consistency
+				const lowerCaseItemName = item.name.trim().toLowerCase();
+
+				const entryDate = new Date(item.date.trim());
+
+				// Check if the lowercase item exists in the category map
+				if (categoryMap[lowerCaseItemName]) {
+				  const shelfLife = categoryMap[lowerCaseItemName].shelfLife;
+				  const bestBeforeDate = new Date(entryDate);
+				  bestBeforeDate.setDate(bestBeforeDate.getDate() + shelfLife);
+
+				  const daysUntilExpiry = Math.ceil((bestBeforeDate - today) / (1000 * 3600 * 24));
+
+				  // Initialize the item in itemsToRestock if it doesn't exist
+				  if (!itemsToRestock[lowerCaseItemName]) {
+					itemsToRestock[lowerCaseItemName] = { lowStock: 0, expiringSoon: 0, expired: 0 };
+				  }
+
+				  // Check stock and expiration conditions
+				  if (daysUntilExpiry < 0) {
+					itemsToRestock[lowerCaseItemName].expired += 1;
+				  } else if (daysUntilExpiry <= 3) {
+					itemsToRestock[lowerCaseItemName].expiringSoon += 1;
+				  } else if (lowerCaseItemName === "milk" && daysUntilExpiry <= 7) {
+					// Special case for milk: low stock if <= 1
+					if (itemsToRestock[lowerCaseItemName].lowStock < 1) {
+					  itemsToRestock[lowerCaseItemName].lowStock += 1;
+					}
+				  } else {
+					itemsToRestock[lowerCaseItemName].lowStock += 1;
+				  }
+				} else {
+				  console.warn(`Item '${lowerCaseItemName}' not found in categoryMap.`);
+				}
+			  });
+
+			  // Display the items in the shopping list
+			  const entries = Object.entries(itemsToRestock);
+			  if (entries.length > 0) {
+				entries.forEach(([itemName, statusCounts]) => {
+				  let listItem = document.createElement('li');
+				  listItem.textContent = `${capitalize(itemName)} ${statusDisplay(statusCounts)}`;
+				  shoppingListDropdown.appendChild(listItem);
+				});
+			  } else {
+				shoppingListDropdown.innerHTML = '<li>No items need restocking.</li>';
+			  }
+			},
+			error: function(error) {
+			  console.error('Error parsing CSV:', error);
+			}
+		  });
+		})
+		.catch(error => console.error('Error fetching CSV:', error));
+	}
+  } else {
+    console.error('Shopping list elements not found in the DOM.');
   }
 
   document.getElementById('getRecipeButton')?.addEventListener('click', function() {
     const checkedIngredients = Array.from(selectedIngredients);
-
     if (checkedIngredients.length === 0) {
       document.getElementById('recipeOutput').innerHTML = '<p>No ingredients selected.</p>';
       return;
     }
-
     fetch('/getRecipe', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -243,59 +409,67 @@ function displayIngredients(data) {
 
   // Functionality for the Add Items button
   document.getElementById('addButton')?.addEventListener('click', function() {
-    const ingredientName = prompt('Enter the ingredient name:');
-    const ingredientDate = prompt('Enter the entry date (Month-DD-YY):');
+  // Prompt for the ingredient name and entry date
+  let ingredientName = prompt('Enter the ingredient name:').toLowerCase().trim();
+  const entryDate = prompt('Enter the entry date (Month-DD-YY):');
 
-    if (ingredientName && ingredientDate) {
-      fetch('/addIngredient', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: ingredientName, date: ingredientDate }),
-      })
-      .then(response => {
-        if (response.ok) {
-          alert('Ingredient added successfully.');
-          fetchIngredients(); // Refresh ingredients list
-        } else {
-          alert('Failed to add ingredient.');
-        }
-      })
-      .catch(error => console.error('Error adding ingredient:', error));
-    }
-  });
+  // Capitalize the first letter of the ingredient name
+  ingredientName = ingredientName.charAt(0).toUpperCase() + ingredientName.slice(1);
 
-  // Additional event listeners for navigation buttons
-  document.getElementById('learnMoreButton')?.addEventListener('click', function(e) {
-    fetch('/clicked', { method: 'POST' })
-      .then(response => {
-        if (response.ok) {
-          const windowHeight = window.innerHeight;
-          window.scrollTo({
-            top: windowHeight,
-            behavior: 'smooth'
-          });
-        }
+  if (ingredientName && entryDate) {
+    // Make a request to add the ingredient
+    fetch('/addIngredient', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: ingredientName,
+        date: entryDate
       })
-      .catch(error => {
-        console.log(error);
-      });
-  });
+    })
+    .then(response => {
+      if (response.ok) {
+        alert('Ingredient added successfully.');
+        fetchIngredients(); // Refresh the ingredients list
+      } else {
+        alert('Failed to add ingredient.');
+      }
+    })
+    .catch(error => console.error('Error adding ingredient:', error));
+  } else {
+    alert("Invalid input. Please try again.");
+  }
+});
 
+// Function to format the date as "MMM-DD-YY"
+function formatDate(date) {
+  const dateObj = new Date(date);
+  const month = dateObj.toLocaleString('en-US', { month: 'short' }); // Get the abbreviated month
+  const day = String(dateObj.getDate()).padStart(2, '0'); // Ensure two-digit day
+  const year = String(dateObj.getFullYear()).slice(-2); // Get the last two digits of the year
+
+  return `${month}-${day}-${year}`; // Construct the formatted date string
+}
+  
   const BASE_URL = 'http://localhost:3000/';
 
   document.getElementById('aboutButton')?.addEventListener('click', function() {
-    window.location.href = BASE_URL + 'About.html';
+    window.location.href = `${BASE_URL}About.html`;
   });
 
   document.getElementById('contactButton')?.addEventListener('click', function() {
-    window.location.href = BASE_URL + 'Contact.html';
+    window.location.href = `${BASE_URL}Contact.html`;
   });
 
   document.getElementById('productsButton')?.addEventListener('click', function() {
-    window.location.href = BASE_URL + 'MyIngredients.html';
+    window.location.href = `${BASE_URL}MyIngredients.html`;
   });
 
   document.getElementById('goBackButton')?.addEventListener('click', function() {
     window.location.href = BASE_URL;
+  });
+
+  document.getElementById('learnMoreButton')?.addEventListener('click', function() {
+    const windowHeight = window.innerHeight;
+    window.scrollTo({ top: windowHeight, behavior: 'smooth' });
   });
 });

@@ -216,13 +216,13 @@ button {
   cursor: pointer;
   border-radius: 20px;
   margin-top: 20px;
-  background-color: #007BFF; /* Blue background for buttons */
+  background-color: #007BFF; 
   color: white;
   border: none;
 }
 
 button:hover {
-  background-color: #0056b3; /* Darker blue when hovered */
+  background-color: #0056b3; 
 }
 
 .ingredient-item {
@@ -254,11 +254,10 @@ button:hover {
 
 .remove-button {
   padding: 3px 6px;
-  /* margin-left: 10px; */
 }
 
 .remove-button:hover {
-  background-color: #7a0216; /* Darker red when hovered */
+  background-color: #7a0216; 
 }
 
 label {
@@ -268,5 +267,26 @@ label {
 .date-box {
   white-space: nowrap;
   display: inline-flex;
-  align-items: center; /* Aligns the date text and button vertically */
+  align-items: center; 
+}
+
+#shoppingListDropdown {
+  position: fixed;
+  top: 85px; 
+  right: 220px; 
+  background-color: white;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+  list-style-type: none;
+  padding: 10px;
+  display: none;
+  z-index: 1001;
+}
+
+#shoppingListDropdown.show {
+  display: block; 
+}
+
+#shoppingListDropdown li {
+  margin-bottom: 5px;
 }

@@ -41,7 +41,7 @@
       align-items: center;
       z-index: 1000;
     }
-    .go-back-icon, .notification-icon, .add-icon {
+    .go-back-icon, .notification-icon, .add-icon, .shopping-list-icon {
       width: 40px;
       height: 40px;
     }
@@ -86,7 +86,7 @@
     /* Dropdown for notifications */
     .dropdown-menu {
       position: fixed;
-      top: 60px;
+      top: 80px;
       right: 10px;
       background-color: white;
       border: 1px solid #ccc;
@@ -116,6 +116,19 @@
       align-items: center;
       z-index: 1000;
     }
+	/* Shopping List Button */
+	.shopping-list-button {
+	  position: fixed;
+	  top: 15px;
+	  right: 220px;
+	  background-color: transparent;
+	  border: none;
+	  cursor: pointer;
+	  display: flex;
+	  flex-direction: column;
+	  align-items: center;
+	  z-index: 1000;
+	}
   </style>
 </head>
 <body class="my-ingredients-page">
@@ -129,16 +142,22 @@
     <span class="go-back-text">NOTIFY ME</span>
   </button>
 
+<ul id="notificationDropdown" class="dropdown-menu"></ul>
+
+
+<audio id="notificationSound" src="ding.wav" preload="auto"></audio>
+  
+<button id="shoppingListButton" class="shopping-list-button">
+  <img src="images/shopping_list.png" alt="Shopping List" class="shopping-list-icon">
+  <span class="button-text">SHOPPING LIST</span>
+</button>
+
+<ul id="shoppingListDropdown" class="dropdown-menu"></ul>
+
   <button id="addButton" class="add-button">
     <img src="images/add_icon.png" class="add-icon">
     <span class="go-back-text">ADD INGREDIENT</span>
-  </button>
-
-  <!-- Dropdown for showing notifications -->
-  <ul id="notificationDropdown" class="dropdown-menu"></ul>
-
-  <!-- Sound element for the notification -->
-  <audio id="notificationSound" src="ding.wav" preload="auto"></audio>
+  </button>  
 
   <div class="container">
     <div id="ingredientsList" class="ingredients-container"></div>

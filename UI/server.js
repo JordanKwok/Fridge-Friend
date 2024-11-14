@@ -15,6 +15,24 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const port = 3000;
 
+const categoryMap = {
+  "milk": { category: "Dairy", shelfLife: 7 },
+  "cheese": { category: "Dairy", shelfLife: 14 },
+  "yogurt": { category: "Dairy", shelfLife: 14 },
+  "cream cheese": { category: "Dairy", shelfLife: 14 },
+  "apple": { category: "Fruits", shelfLife: 5 },
+  "banana": { category: "Fruits", shelfLife: 5 },
+  "carrot": { category: "Vegetables", shelfLife: 7 },
+  "chicken": { category: "Meat", shelfLife: 4 },
+  "onion": { category: "Vegetables", shelfLife: 7 },
+  "cabbage": { category: "Vegetables", shelfLife: 7 },
+  "bacon": { category: "Meat", shelfLife: 14 },
+  "bread": { category: "Baked Goods", shelfLife: 4 },
+  "cereal": { category: "Packaged Goods", shelfLife: 30 }
+  // Add more items as needed
+};
+
+
 // Connect to SQLite Database
 const dbPath = path.join(__dirname, 'recipes.db');
 const db = new sqlite3.Database(dbPath, (err) => {
@@ -176,6 +194,12 @@ app.post('/editIngredient', async (req, res) => {
   }
 });
 
+function calculateBestBeforeDate(entryDate, shelfLife) {
+	  const date = new Date(entryDate);
+	  date.setDate(date.getDate() + shelfLife);
+	  return date.toLocaleDateString("en-US", { month: "short", day: "2-digit", year: "2-digit" }).replace(' ', '-');
+	}
+
 // Endpoint to add a new ingredient
 app.post('/addIngredient', (req, res) => {
   const { name, date } = req.body;
@@ -187,7 +211,16 @@ app.post('/addIngredient', (req, res) => {
       return res.status(500).send('Error reading file');
     }
 
-    const updatedData = data + `\n${name},${date}`;
+    // Ensure that the name is consistently capitalized
+    const capitalizedName = name.charAt(0).toUpperCase() + name.slice(1);
+
+    // Format the date using the formatDate function
+    const formattedDate = formatDate(date);
+
+    // Prepare the new line to be added
+    const newLine = `\n${capitalizedName},${formattedDate}`;
+
+    const updatedData = data + newLine;
     fs.writeFile(filePath, updatedData, 'utf8', (err) => {
       if (err) {
         console.error('Error writing to file:', err);
@@ -199,11 +232,14 @@ app.post('/addIngredient', (req, res) => {
   });
 });
 
-
-// Function to format the date as "MMM DD, YY"
+// Function to format the date as "MMM-DD-YY"
 function formatDate(date) {
-  const options = { month: 'short', day: '2-digit', year: '2-digit' };
-  return date.toLocaleDateString('en-US', options).replace(' ', '-').replace(', ', '-');
+  const dateObj = new Date(date);
+  const month = dateObj.toLocaleString('en-US', { month: 'short' }); // Get the abbreviated month
+  const day = String(dateObj.getDate()).padStart(2, '0'); // Ensure two-digit day
+  const year = String(dateObj.getFullYear()).slice(-2); // Get the last two digits of the year
+
+  return `${month}-${day}-${year}`; // Construct the formatted date string
 }
 
 app.use(express.json());
