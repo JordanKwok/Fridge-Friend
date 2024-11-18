@@ -20,6 +20,13 @@ const io = new Server(server);
 
 const port = 3000;
 
+let operationQueue = Promise.resolve();
+
+function queueOperation(operation) {
+  operationQueue = operationQueue.then(() => operation());
+  return operationQueue;
+}
+
 const categoryMap = {
   "milk": { category: "Dairy", shelfLife: 7 },
   "cheese": { category: "Dairy", shelfLife: 14 },
@@ -193,11 +200,12 @@ app.post('/addIngredient', (req, res) => {
 
 // Endpoint to receive items with "true/false" status
 app.post('/receiveItemsStatus', (req, res) => {
-  const itemsStatus = req.body; // Example: { "Apple": true, "Banana": true }
-  
+  const itemsStatus = req.body; // Example: { "Apple": true, "Banana": false }
+
   console.log('Received items with status:', itemsStatus);
-  
+
   // Emit the sessionComplete event to notify the client
+  // Send itemsStatus to the client so that the modal can display them as either Going IN or Going OUT
   io.emit('sessionComplete', itemsStatus);
 
   // Respond to the client indicating the items were received successfully
@@ -206,27 +214,104 @@ app.post('/receiveItemsStatus', (req, res) => {
 
 // Endpoint to receive confirmed items and write to CSV
 app.post('/addConfirmedItems', (req, res) => {
-  const confirmedItems = req.body; // Expecting an array of { name, date } objects
+  queueOperation(() => {
+    return new Promise((resolve, reject) => {
+      const confirmedItems = req.body; // Expecting an array of { name, date } objects
 
-  fs.readFile(csvFilePath, 'utf8', (err, data) => {
-    if (err) {
-      console.error('Error reading CSV file:', err);
-      return res.status(500).send('Error reading CSV file');
-    }
+      fs.readFile(csvFilePath, 'utf8', (err, data) => {
+        if (err) {
+          console.error('Error reading CSV file:', err);
+          res.status(500).send('Error reading CSV file');
+          return reject(err);
+        }
 
-    // Prepare the new lines to be added to the CSV
-    const newLines = confirmedItems.map(item => `${item.name},${item.date}`);
+        // Prepare the new lines to be added to the CSV
+        const newLines = confirmedItems.map(item => `${item.name},${item.date}`);
 
-    // Append the new lines to the existing data
-    const updatedData = data.trim() + '\n' + newLines.join('\n');
+        // Append the new lines to the existing data
+        const updatedData = data.trim() + '\n' + newLines.join('\n');
 
-    fs.writeFile(csvFilePath, updatedData, 'utf8', (err) => {
-      if (err) {
-        console.error('Error writing to CSV file:', err);
-        return res.status(500).send('Error writing to CSV file');
-      }
+        fs.writeFile(csvFilePath, updatedData, 'utf8', (err) => {
+          if (err) {
+            console.error('Error writing to CSV file:', err);
+            res.status(500).send('Error writing to CSV file');
+            return reject(err);
+          }
 
-      res.send('Items confirmed and added successfully.');
+          resolve('Items confirmed and added successfully.');
+        });
+      });
+    })
+    .then(message => {
+      res.send(message);
+    })
+    .catch(err => {
+      console.error('Error:', err);
+      res.status(500).send('Error processing confirmed items');
+    });
+  });
+});
+
+// Endpoint to remove confirmed items from CSV
+app.post('/removeConfirmedItems', (req, res) => {
+  queueOperation(() => {
+    return new Promise((resolve, reject) => {
+      const itemsToRemove = req.body; // Expecting an array of { name } objects
+
+      fs.readFile(csvFilePath, 'utf8', (err, data) => {
+        if (err) {
+          console.error('Error reading CSV file:', err);
+          res.status(500).send('Error reading CSV file');
+          return reject(err);
+        }
+
+        const lines = data.trim().split('\n');
+        const header = lines.shift(); // Remove the header line
+        const items = lines.map(line => line.split(','));
+
+        // Iterate over each item to be removed and remove the oldest entry
+        itemsToRemove.forEach(itemToRemove => {
+          const itemName = itemToRemove.name.toLowerCase();
+          let oldestIndex = -1;
+          let oldestDate = new Date();
+
+          for (let i = 0; i < items.length; i++) {
+            const [name, date] = items[i];
+            if (name.trim().toLowerCase() === itemName) {
+              const currentDate = new Date(date.trim());
+              if (currentDate < oldestDate) {
+                oldestDate = currentDate;
+                oldestIndex = i;
+              }
+            }
+          }
+
+          // If an item was found, remove it
+          if (oldestIndex !== -1) {
+            items.splice(oldestIndex, 1);
+          }
+        });
+
+        // Reconstruct the updated CSV data
+        const updatedData = [header, ...items.map(item => item.join(','))].join('\n');
+
+        fs.writeFile(csvFilePath, updatedData, 'utf8', (err) => {
+          if (err) {
+            console.error('Error writing to CSV file:', err);
+            res.status(500).send('Error writing to CSV file');
+            return reject(err);
+          }
+
+          resolve('Items removed successfully.');
+        });
+      });
+    })
+    .then(message => {
+      res.send(message);
+    })
+    .catch(err => {
+      console.error('Error:', err);
+      res.status(500).send('Error processing removal of items');
     });
   });
 });

@@ -69,7 +69,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
 	  let itemsConfirmedCount = 0;
 	  let totalItems = 0;
-	  const itemsToInsert = [];
 
 	  // Check if the exitSessionReviewButton exists before setting properties
 	  if (exitSessionReviewButton) {
@@ -192,33 +191,31 @@ document.addEventListener('DOMContentLoaded', function() {
       });
     }
 
-    const showSessionModal = localStorage.getItem('showSessionModal');
-    if (showSessionModal === 'true') {
-      localStorage.removeItem('showSessionModal');
-      const newItemsData = JSON.parse(localStorage.getItem('newItemsData') || '{}');
-      showSessionReviewModal(newItemsData);
-    }
+    // Global variable for storing items to be inserted/removed into the CSV
+	let itemsToInsert = [];
+	let itemsToRemove = [];
 
 	// Function to show the session review modal
 	function showSessionReviewModal(newItems) {
 	  sessionItemsContainer.innerHTML = ''; // Clear previous items
+	  itemsToInsert = []; // Clear itemsToInsert array for fresh session
+	  itemsToRemove = []; // Clear itemsToRemove array for fresh session
 	  const itemCounts = {};
 
-	  // Count the quantities for each item
+	  // Count the quantities for each item and prepare the display
 	  Object.entries(newItems).forEach(([itemName, status]) => {
-		if (status === true) {
-		  if (itemCounts[itemName]) {
-			itemCounts[itemName] += 1;
-		  } else {
-			itemCounts[itemName] = 1;
-		  }
+		if (itemCounts[itemName]) {
+		  itemCounts[itemName].count += 1;
+		} else {
+		  itemCounts[itemName] = { count: 1, status };
 		}
 	  });
 
 	  totalItems = Object.keys(itemCounts).length; // Set totalItems count
+	  itemsConfirmedCount = 0; // Reset confirmed items count
 
-	  // Populate the modal with items
-	  Object.entries(itemCounts).forEach(([itemName, count]) => {
+	  // Populate the modal with the items
+	  Object.entries(itemCounts).forEach(([itemName, itemData]) => {
 		const itemRow = document.createElement('div');
 		itemRow.classList.add('item-row');
 
@@ -233,6 +230,13 @@ document.addEventListener('DOMContentLoaded', function() {
 		nameInput.value = itemName;
 		nameInput.classList.add('item-name-input');
 		nameInput.style.display = 'none'; // Hide initially
+
+		// Create a dropdown to choose status (Going IN / Going OUT)
+		const statusDropdown = document.createElement('select');
+		const inOption = new Option('Going IN', 'in', false, itemData.status === true);
+		const outOption = new Option('Going OUT', 'out', false, itemData.status === false);
+		statusDropdown.append(inOption, outOption);
+		statusDropdown.classList.add('item-status-dropdown');
 
 		// Create the Edit button
 		const editButton = document.createElement('button');
@@ -250,6 +254,7 @@ document.addEventListener('DOMContentLoaded', function() {
 		confirmButton.textContent = 'Confirm';
 		confirmButton.classList.add('confirm-button');
 		confirmButton.addEventListener('click', () => {
+		  // Confirm the item and update the UI
 		  nameInput.disabled = true; // Make the input non-editable
 		  nameInput.style.display = 'none'; // Hide the input
 		  nameSpan.textContent = nameInput.value.trim(); // Update the span text
@@ -258,11 +263,23 @@ document.addEventListener('DOMContentLoaded', function() {
 		  confirmButton.style.display = 'none'; // Hide the Confirm button
 		  editButton.style.display = 'none'; // Hide the Edit button
 
-		  // Add item to itemsToInsert array for server submission with formatted date
-		  itemsToInsert.push({
-			name: nameInput.value.trim(),
-			date: formatDate(new Date()) // Use formatDate function for correct date format
-		  });
+		  // Determine the status from the dropdown and push items to respective arrays
+		  const status = statusDropdown.value === 'in' ? true : false;
+
+		  if (status === true) {
+			// Add item to itemsToInsert array for server submission
+			itemsToInsert.push({
+			  name: nameInput.value.trim(),
+			  date: formatDate(new Date()), // Use formatDate function for correct date format
+			});
+			console.log("Item added to insert array:", itemsToInsert);
+		  } else if (status === false) {
+			// Add item to itemsToRemove array for server submission
+			itemsToRemove.push({
+			  name: nameInput.value.trim(),
+			});
+			console.log("Item added to remove array:", itemsToRemove);
+		  }
 
 		  itemsConfirmedCount++;
 		  if (itemsConfirmedCount === totalItems) {
@@ -273,6 +290,7 @@ document.addEventListener('DOMContentLoaded', function() {
 		// Append elements to the item row
 		itemRow.appendChild(nameSpan);
 		itemRow.appendChild(nameInput);
+		itemRow.appendChild(statusDropdown);
 		itemRow.appendChild(editButton);
 		itemRow.appendChild(confirmButton);
 		sessionItemsContainer.appendChild(itemRow);
@@ -283,25 +301,109 @@ document.addEventListener('DOMContentLoaded', function() {
 
 	  // Close button logic in the modal
 	  exitSessionReviewButton.addEventListener('click', function () {
-		sessionModal.classList.remove('show'); // Close the modal
+		  console.log("Close button clicked"); // Debug log to check if button is triggered
+		  sessionModal.classList.remove('show'); // Close the modal
+		  console.log("Modal should be hidden now"); // Debug log to verify modal hide
 
-		// Send the confirmed items to the server
-		fetch('/addConfirmedItems', {
-		  method: 'POST',
-		  headers: { 'Content-Type': 'application/json' },
-		  body: JSON.stringify(itemsToInsert), // Send only confirmed items
-		})
-		  .then(response => {
-			if (response.ok) {
-			  alert('Items have been added successfully.');
-			  fetchIngredients(); // Refresh the ingredients list
-			} else {
-			  alert('Failed to add items.');
-			}
-		  })
-		  .catch(error => console.error('Error adding items:', error));
-	  });
+		  let addSuccess = true;
+		  let removeSuccess = true;
+
+		  // Handle the addition of confirmed items
+		  if (itemsToInsert.length > 0) {
+			console.log("Items to add:", itemsToInsert); // Debug log to see items to be added
+			fetch('/addConfirmedItems', {
+			  method: 'POST',
+			  headers: { 'Content-Type': 'application/json' },
+			  body: JSON.stringify(itemsToInsert),
+			})
+			  .then(response => {
+				if (response.ok) {
+				  console.log("Items added successfully");
+				  alert('Items have been added successfully.');
+				} else {
+				  console.error("Failed to add items");
+				  alert('Failed to add items.');
+				  addSuccess = false;
+				}
+			  })
+			  .then(() => {
+				// After attempting to add items, handle removal
+				if (itemsToRemove.length > 0) {
+				  console.log("Items to remove:", itemsToRemove); // Debug log to see items to be removed
+				  return fetch('/removeConfirmedItems', {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify(itemsToRemove),
+				  });
+				} else {
+				  console.log("No items to remove");
+				  return null; // No items to remove, so return null
+				}
+			  })
+			  .then(removeResponse => {
+				if (removeResponse) {
+				  if (removeResponse.ok) {
+					console.log("Items removed successfully");
+					alert('Items have been removed successfully.');
+				  } else {
+					console.error("Failed to remove items");
+					alert('Failed to remove items.');
+					removeSuccess = false;
+				  }
+				}
+			  })
+			  .then(() => {
+				// Refresh the ingredients list only if both add and remove were successful
+				if (addSuccess && removeSuccess) {
+				  console.log("Fetching updated ingredients");
+				  fetchIngredients();
+				}
+			  })
+			  .catch(error => {
+				console.error('Error during item operations:', error);
+				alert('An error occurred while processing your request. Please try again.');
+			  });
+		  } else if (itemsToRemove.length > 0) {
+			// Handle removal if there are no items to add
+			console.log("Items to remove only:", itemsToRemove);
+			fetch('/removeConfirmedItems', {
+			  method: 'POST',
+			  headers: { 'Content-Type': 'application/json' },
+			  body: JSON.stringify(itemsToRemove),
+			})
+			  .then(response => {
+				if (response.ok) {
+				  console.log("Items removed successfully");
+				  alert('Items have been removed successfully.');
+				  removeSuccess = true;
+				} else {
+				  console.error("Failed to remove items");
+				  alert('Failed to remove items.');
+				  removeSuccess = false;
+				}
+			  })
+			  .then(() => {
+				if (removeSuccess) {
+				  console.log("Fetching updated ingredients");
+				  fetchIngredients();
+				}
+			  })
+			  .catch(error => {
+				console.error('Error during item operations:', error);
+				alert('An error occurred while processing your request. Please try again.');
+			  });
+		  }
+		});
 	}
+
+	// Check if the session review modal should be shown after session completion
+	const showSessionModal = localStorage.getItem('showSessionModal');
+	if (showSessionModal === 'true') {
+	  localStorage.removeItem('showSessionModal'); // Clear the flag
+	  const newItemsData = JSON.parse(localStorage.getItem('newItemsData') || '{}');
+	  showSessionReviewModal(newItemsData);
+	}
+
 
     function checkForExpiringItems(data) {
       const today = new Date();
