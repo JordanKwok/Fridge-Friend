@@ -1,174 +1,308 @@
 document.addEventListener('DOMContentLoaded', function() {
-  const notificationBell = document.getElementById('notificationBell');
-  const notificationSound = document.getElementById('notificationSound');
-  const dropdownMenu = document.getElementById('notificationDropdown');
-  const shoppingListButton = document.getElementById('shoppingListButton');
-  const shoppingListDropdown = document.getElementById('shoppingListDropdown');
+  const categoryMap = {
+    "milk": { category: "Dairy", shelfLife: 7 },
+    "cheese": { category: "Dairy", shelfLife: 14 },
+    "yogurt": { category: "Dairy", shelfLife: 14 },
+    "cream cheese": { category: "Dairy", shelfLife: 14 },
+    "apple": { category: "Fruits", shelfLife: 5 },
+    "banana": { category: "Fruits", shelfLife: 5 },
+    "carrot": { category: "Vegetables", shelfLife: 7 },
+    "chicken": { category: "Meat", shelfLife: 4 },
+    "onion": { category: "Vegetables", shelfLife: 7 },
+    "cabbage": { category: "Vegetables", shelfLife: 7 },
+    "bacon": { category: "Meat", shelfLife: 14 },
+    "bread": { category: "Baked Goods", shelfLife: 4 },
+    "cereal": { category: "Packaged Goods", shelfLife: 30 }
+  };
 
-  let notificationSoundPlayed = false;
+  // Global elements and functions
+  const socket = io();
+  const BASE_URL = 'http://localhost:3000/';
 
-  localStorage.removeItem('selectedIngredients');
-  let selectedIngredients = new Set(JSON.parse(localStorage.getItem('selectedIngredients')) || []);
-  let expandedIngredients = new Set(JSON.parse(localStorage.getItem('expandedIngredients')) || []);
+  // Navigation buttons
+  document.getElementById('aboutButton')?.addEventListener('click', function() {
+    window.location.href = `${BASE_URL}About.html`;
+  });
 
-  setInterval(fetchIngredients, 1000);
+  document.getElementById('contactButton')?.addEventListener('click', function() {
+    window.location.href = `${BASE_URL}Contact.html`;
+  });
 
-	function calculateBestBeforeDate(entryDate, shelfLife) {
-	  const date = new Date(entryDate);
-	  date.setDate(date.getDate() + shelfLife);
-	  return date.toLocaleDateString("en-US", { month: "short", day: "2-digit", year: "2-digit" }).replace(' ', '-');
-	}
+  document.getElementById('productsButton')?.addEventListener('click', function() {
+    window.location.href = `${BASE_URL}MyIngredients.html`;
+  });
 
-	const categoryMap = {
-	  "milk": { category: "Dairy", shelfLife: 7 },
-	  "cheese": { category: "Dairy", shelfLife: 14 },
-	  "yogurt": { category: "Dairy", shelfLife: 14 },
-	  "cream cheese": { category: "Dairy", shelfLife: 14 },
-	  "apple": { category: "Fruits", shelfLife: 5 },
-	  "banana": { category: "Fruits", shelfLife: 5 },
-	  "carrot": { category: "Vegetables", shelfLife: 7 },
-	  "chicken": { category: "Meat", shelfLife: 4 },
-	  "onion": { category: "Vegetables", shelfLife: 7 },
-	  "cabbage": { category: "Vegetables", shelfLife: 7 },
-	  "bacon": { category: "Meat", shelfLife: 14 },
-	  "bread": { category: "Baked Goods", shelfLife: 4 },
-	  "cereal": { category: "Packaged Goods", shelfLife: 30 }
-	  // Add more items as needed
-	};
+  document.getElementById('goBackButton')?.addEventListener('click', function() {
+    window.location.href = BASE_URL;
+  });
 
+  document.getElementById('learnMoreButton')?.addEventListener('click', function() {
+    const windowHeight = window.innerHeight;
+    window.scrollTo({ top: windowHeight, behavior: 'smooth' });
+  });
 
+  // Global notification logic for session completion
+  socket.on('sessionComplete', function(newItems) {
+    alert('A session has completed. Click to review items.');
 
-  function fetchIngredients() {
-	  fetch('Ingredients.csv')
-		.then(response => response.text())
-		.then(text => {
-		  Papa.parse(text, {
-			header: true,
-			complete: function(results) {
-			  // Automatically update the best_before_date if undefined
-			  results.data.forEach(item => {
-				if (!item.best_before_date || item.best_before_date.trim() === "") {
-				  const category = categoryMap[item.name.toLowerCase()];
-				  if (category) {
-					item.best_before_date = calculateBestBeforeDate(item.date, category.shelfLife);
-				  }
-				}
-			  });
-
-			  displayIngredients(results.data);
-			  checkForExpiringItems(results.data);
-			},
-			error: function(error) {
-			  console.error('Error parsing CSV:', error);
-			}
-		  });
-		})
-		.catch(error => console.error('Error fetching CSV:', error));
-	}
-
-
-  function displayIngredients(data) {
-    const ingredientsList = document.getElementById('ingredientsList');
-    if (!ingredientsList) {
-      console.error('Element with ID "ingredientsList" not found.');
-      return;
+    if (confirm('Do you want to view your items now?')) {
+      localStorage.setItem('showSessionModal', 'true');
+      localStorage.setItem('newItemsData', JSON.stringify(newItems));
+      window.location.href = `${BASE_URL}MyIngredients.html`;
     }
-    ingredientsList.innerHTML = '';
-    const ingredientCountMap = {};
+  });
 
-    data.forEach(item => {
-      if (ingredientCountMap[item.name]) {
-        ingredientCountMap[item.name].count += 1;
-        ingredientCountMap[item.name].dates.push(item.date);
-        ingredientCountMap[item.name].bestBeforeDates.push(item.best_before_date);
-      } else {
-        ingredientCountMap[item.name] = {
-          count: 1,
-          dates: [item.date],
-          bestBeforeDates: [item.best_before_date]
-        };
+  // Check if on MyIngredients.html page
+  if (document.body.classList.contains('my-ingredients-page')) {
+    const notificationBell = document.getElementById('notificationBell');
+	  const notificationSound = document.getElementById('notificationSound');
+	  const dropdownMenu = document.getElementById('notificationDropdown');
+	  const shoppingListButton = document.getElementById('shoppingListButton');
+	  const shoppingListDropdown = document.getElementById('shoppingListDropdown');
+	  const sessionModal = document.getElementById('sessionModal');
+	  const sessionItemsContainer = document.getElementById('sessionItems');
+	  const exitSessionReviewButton = document.getElementById('exitSessionReviewButton');
+
+	  let notificationSoundPlayed = false;
+	  let selectedIngredients = new Set(JSON.parse(localStorage.getItem('selectedIngredients')) || []);
+	  let expandedIngredients = new Set(JSON.parse(localStorage.getItem('expandedIngredients')) || []);
+
+	  let itemsConfirmedCount = 0;
+	  let totalItems = 0;
+	  const itemsToInsert = [];
+
+	  // Check if the exitSessionReviewButton exists before setting properties
+	  if (exitSessionReviewButton) {
+		exitSessionReviewButton.disabled = true;
+	  }
+
+    setInterval(fetchIngredients, 1000);
+
+    function fetchIngredients() {
+      fetch('Ingredients.csv')
+        .then(response => response.text())
+        .then(text => {
+          Papa.parse(text, {
+            header: true,
+            complete: function(results) {
+              results.data.forEach(item => {
+                if (!item.best_before_date || item.best_before_date.trim() === "") {
+                  const category = categoryMap[item.name.toLowerCase()];
+                  if (category) {
+                    item.best_before_date = calculateBestBeforeDate(item.date, category.shelfLife);
+                  }
+                }
+              });
+
+              displayIngredients(results.data);
+              checkForExpiringItems(results.data);
+            },
+            error: function(error) {
+              console.error('Error parsing CSV:', error);
+            }
+          });
+        })
+        .catch(error => console.error('Error fetching CSV:', error));
+    }
+
+    function displayIngredients(data) {
+      const ingredientsList = document.getElementById('ingredientsList');
+      if (!ingredientsList) {
+        console.error('Element with ID "ingredientsList" not found.');
+        return;
       }
-    });
+      ingredientsList.innerHTML = '';
+      const ingredientCountMap = {};
 
-    Object.keys(ingredientCountMap).forEach(name => {
-      const ingredientData = ingredientCountMap[name];
-      const count = ingredientData.count;
-      const dates = ingredientData.dates;
-      const bestBeforeDates = ingredientData.bestBeforeDates;
+      data.forEach(item => {
+        if (ingredientCountMap[item.name]) {
+          ingredientCountMap[item.name].count += 1;
+          ingredientCountMap[item.name].dates.push(item.date);
+          ingredientCountMap[item.name].bestBeforeDates.push(item.best_before_date);
+        } else {
+          ingredientCountMap[item.name] = {
+            count: 1,
+            dates: [item.date],
+            bestBeforeDates: [item.best_before_date]
+          };
+        }
+      });
 
-      const itemDiv = document.createElement('div');
-      itemDiv.classList.add('ingredient-item');
+      Object.keys(ingredientCountMap).forEach(name => {
+        const ingredientData = ingredientCountMap[name];
+        const itemDiv = document.createElement('div');
+        itemDiv.classList.add('ingredient-item');
 
-      const checkbox = document.createElement('input');
-      checkbox.type = 'checkbox';
-      checkbox.id = `ingredient-${name}`;
-      checkbox.classList.add('ingredient-checkbox');
-      checkbox.checked = selectedIngredients.has(name);
-
-      const label = document.createElement('label');
-      label.htmlFor = checkbox.id;
-      label.textContent = `${name} (${count})`;
-
-      const datesContainer = document.createElement('div');
-      datesContainer.classList.add('dates-container');
-      datesContainer.style.display = expandedIngredients.has(name) ? 'block' : 'none';
-
-      dates.forEach((date, index) => {
-        const dateBox = document.createElement('div');
-        dateBox.classList.add('date-box');
-        dateBox.textContent = `Entry Date: ${date} | Best Before: ${bestBeforeDates[index]}`;
-
-        const dateRemoveButton = document.createElement('button');
-        dateRemoveButton.classList.add('remove-button');
-        dateRemoveButton.textContent = 'X';
-        dateRemoveButton.addEventListener('click', function() {
-          removeIngredientDate(name, date);
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.id = `ingredient-${name}`;
+        checkbox.classList.add('ingredient-checkbox');
+        checkbox.checked = selectedIngredients.has(name);
+        checkbox.addEventListener('change', function() {
+          if (checkbox.checked) {
+            selectedIngredients.add(name);
+          } else {
+            selectedIngredients.delete(name);
+          }
+          localStorage.setItem('selectedIngredients', JSON.stringify(Array.from(selectedIngredients)));
         });
-        dateBox.appendChild(dateRemoveButton);
-        datesContainer.appendChild(dateBox);
+
+        const label = document.createElement('label');
+        label.htmlFor = checkbox.id;
+        label.textContent = `${name} (${ingredientData.count})`;
+
+        const datesContainer = document.createElement('div');
+        datesContainer.classList.add('dates-container');
+        datesContainer.style.display = expandedIngredients.has(name) ? 'block' : 'none';
+
+        ingredientData.dates.forEach((date, index) => {
+          const dateBox = document.createElement('div');
+          dateBox.classList.add('date-box');
+          dateBox.textContent = `Entry Date: ${date} | Best Before: ${ingredientData.bestBeforeDates[index]}`;
+          const dateRemoveButton = document.createElement('button');
+          dateRemoveButton.classList.add('remove-button');
+          dateRemoveButton.textContent = 'X';
+          dateRemoveButton.addEventListener('click', function() {
+            removeIngredientDate(name, date);
+          });
+          dateBox.appendChild(dateRemoveButton);
+          datesContainer.appendChild(dateBox);
+        });
+
+        const showDatesButton = document.createElement('button');
+        showDatesButton.textContent = expandedIngredients.has(name) ? 'Hide' : 'Details';
+        showDatesButton.classList.add('show-dates-button');
+        showDatesButton.addEventListener('click', function() {
+          const isHidden = datesContainer.style.display === 'none';
+          datesContainer.style.display = isHidden ? 'block' : 'none';
+          showDatesButton.textContent = isHidden ? 'Hide' : 'Details';
+          if (isHidden) {
+            expandedIngredients.add(name);
+          } else {
+            expandedIngredients.delete(name);
+          }
+          localStorage.setItem('expandedIngredients', JSON.stringify(Array.from(expandedIngredients)));
+        });
+
+        itemDiv.appendChild(checkbox);
+        itemDiv.appendChild(label);
+        itemDiv.appendChild(showDatesButton);
+        itemDiv.appendChild(datesContainer);
+        ingredientsList.appendChild(itemDiv);
       });
+    }
 
-      const showDatesButton = document.createElement('button');
-      showDatesButton.textContent = expandedIngredients.has(name) ? 'Hide' : 'Details';
-      showDatesButton.classList.add('show-dates-button');
-      showDatesButton.addEventListener('click', function() {
-        const isHidden = datesContainer.style.display === 'none';
-        datesContainer.style.display = isHidden ? 'block' : 'none';
-        showDatesButton.textContent = isHidden ? 'Hide' : 'Details';
-        if (isHidden) {
-          expandedIngredients.add(name);
-        } else {
-          expandedIngredients.delete(name);
-        }
-        localStorage.setItem('expandedIngredients', JSON.stringify(Array.from(expandedIngredients)));
-      });
+    const showSessionModal = localStorage.getItem('showSessionModal');
+    if (showSessionModal === 'true') {
+      localStorage.removeItem('showSessionModal');
+      const newItemsData = JSON.parse(localStorage.getItem('newItemsData') || '{}');
+      showSessionReviewModal(newItemsData);
+    }
 
-      checkbox.addEventListener('change', function() {
-        if (checkbox.checked) {
-          selectedIngredients.add(name);
-        } else {
-          selectedIngredients.delete(name);
-        }
-        localStorage.setItem('selectedIngredients', JSON.stringify(Array.from(selectedIngredients)));
-      });
+	// Function to show the session review modal
+	function showSessionReviewModal(newItems) {
+	  sessionItemsContainer.innerHTML = ''; // Clear previous items
+	  const itemCounts = {};
 
-      const editButton = document.createElement('button');
-      editButton.textContent = 'Edit';
-      editButton.classList.add('edit-button');
-      editButton.addEventListener('click', function() {
-        editIngredient({ name });
-      });
+	  // Count the quantities for each item
+	  Object.entries(newItems).forEach(([itemName, status]) => {
+		if (status === true) {
+		  if (itemCounts[itemName]) {
+			itemCounts[itemName] += 1;
+		  } else {
+			itemCounts[itemName] = 1;
+		  }
+		}
+	  });
 
-      itemDiv.appendChild(checkbox);
-      itemDiv.appendChild(label);
-      itemDiv.appendChild(showDatesButton);
-      itemDiv.appendChild(datesContainer);
-      itemDiv.appendChild(editButton);
-      ingredientsList.appendChild(itemDiv);
-    });
-  }
+	  totalItems = Object.keys(itemCounts).length; // Set totalItems count
 
-  if (notificationBell && notificationSound && dropdownMenu) {
+	  // Populate the modal with items
+	  Object.entries(itemCounts).forEach(([itemName, count]) => {
+		const itemRow = document.createElement('div');
+		itemRow.classList.add('item-row');
+
+		// Create a non-editable text span for the item name
+		const nameSpan = document.createElement('span');
+		nameSpan.textContent = itemName;
+		nameSpan.classList.add('item-name-span');
+
+		// Create an editable text input (hidden by default)
+		const nameInput = document.createElement('input');
+		nameInput.type = 'text';
+		nameInput.value = itemName;
+		nameInput.classList.add('item-name-input');
+		nameInput.style.display = 'none'; // Hide initially
+
+		// Create the Edit button
+		const editButton = document.createElement('button');
+		editButton.textContent = 'Edit';
+		editButton.classList.add('edit-button');
+		editButton.addEventListener('click', () => {
+		  nameSpan.style.display = 'none'; // Hide the span
+		  nameInput.style.display = 'inline'; // Show the input
+		  nameInput.disabled = false; // Make the input editable
+		  editButton.style.display = 'none'; // Hide the Edit button
+		});
+
+		// Create the Confirm button
+		const confirmButton = document.createElement('button');
+		confirmButton.textContent = 'Confirm';
+		confirmButton.classList.add('confirm-button');
+		confirmButton.addEventListener('click', () => {
+		  nameInput.disabled = true; // Make the input non-editable
+		  nameInput.style.display = 'none'; // Hide the input
+		  nameSpan.textContent = nameInput.value.trim(); // Update the span text
+		  nameSpan.style.display = 'inline'; // Show the span
+		  nameSpan.classList.add('centered'); // Center the text
+		  confirmButton.style.display = 'none'; // Hide the Confirm button
+		  editButton.style.display = 'none'; // Hide the Edit button
+
+		  // Add item to itemsToInsert array for server submission with formatted date
+		  itemsToInsert.push({
+			name: nameInput.value.trim(),
+			date: formatDate(new Date()) // Use formatDate function for correct date format
+		  });
+
+		  itemsConfirmedCount++;
+		  if (itemsConfirmedCount === totalItems) {
+			exitSessionReviewButton.disabled = false; // Enable Close button
+		  }
+		});
+
+		// Append elements to the item row
+		itemRow.appendChild(nameSpan);
+		itemRow.appendChild(nameInput);
+		itemRow.appendChild(editButton);
+		itemRow.appendChild(confirmButton);
+		sessionItemsContainer.appendChild(itemRow);
+	  });
+
+	  // Show the modal
+	  sessionModal.classList.add('show');
+
+	  // Close button logic in the modal
+	  exitSessionReviewButton.addEventListener('click', function () {
+		sessionModal.classList.remove('show'); // Close the modal
+
+		// Send the confirmed items to the server
+		fetch('/addConfirmedItems', {
+		  method: 'POST',
+		  headers: { 'Content-Type': 'application/json' },
+		  body: JSON.stringify(itemsToInsert), // Send only confirmed items
+		})
+		  .then(response => {
+			if (response.ok) {
+			  alert('Items have been added successfully.');
+			  fetchIngredients(); // Refresh the ingredients list
+			} else {
+			  alert('Failed to add items.');
+			}
+		  })
+		  .catch(error => console.error('Error adding items:', error));
+	  });
+	}
+
     function checkForExpiringItems(data) {
       const today = new Date();
       const expiringItems = [];
@@ -202,170 +336,77 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     notificationBell.addEventListener('click', function() {
-		// Toggle the 'show' class for the notification dropdown
-		notificationDropdown.classList.toggle('show');
+      notificationDropdown.classList.toggle('show');
+      if (notificationDropdown.classList.contains('show')) {
+        shoppingListDropdown.classList.remove('show');
+      }
+    });
 
-		// If the notifications dropdown is shown, hide the shopping list dropdown
-		if (notificationDropdown.classList.contains('show')) {
-		  shoppingListDropdown.classList.remove('show');
-		}
-	  });
-  } else {
-    console.error('Notification elements not found in the DOM.');
-  }
+    shoppingListButton?.addEventListener('click', function() {
+      shoppingListDropdown.classList.toggle('show');
+      if (shoppingListDropdown.classList.contains('show')) {
+        notificationDropdown.classList.remove('show');
+        generateShoppingList();
+      }
+    });
 
-	// Function to remove an ingredient date
-	function removeIngredientDate(name, date) {
-	  fetch('/removeIngredientDate', {
-		method: 'POST',
-		headers: { 'Content-Type': 'application/json' },
-		body: JSON.stringify({ ingredient: name, date: date })
-	  })
-	  .then(response => {
-		if (response.ok) {
-		  alert('Ingredient removed successfully.');
-		  fetchIngredients(); // Refresh the ingredients list
-		} else {
-		  alert('Failed to remove ingredient.');
-		}
-	  })
-	  .catch(error => console.error('Error removing ingredient:', error));
-	}
+    function generateShoppingList() {
+      shoppingListDropdown.innerHTML = '';
+      const today = new Date();
+      const itemsToRestock = {};
 
-	// Function to edit an ingredient
-	function editIngredient({ name }) {
-	  const newName = prompt(`Edit name for ${name}:`, name);
-	  const newDate = prompt('Edit entry date (Month-DD-YY):');
+      fetch('Ingredients.csv')
+        .then(response => response.text())
+        .then(text => {
+          Papa.parse(text, {
+            header: true,
+            complete: function(results) {
+              results.data.forEach(item => {
+                if (!item.name || !item.date) return;
+                const lowerCaseItemName = item.name.trim().toLowerCase();
+                const entryDate = new Date(item.date.trim());
+                if (categoryMap[lowerCaseItemName]) {
+                  const shelfLife = categoryMap[lowerCaseItemName].shelfLife;
+                  const bestBeforeDate = new Date(entryDate);
+                  bestBeforeDate.setDate(bestBeforeDate.getDate() + shelfLife);
+                  const daysUntilExpiry = Math.ceil((bestBeforeDate - today) / (1000 * 3600 * 24));
 
-	  if (newName && newDate) {
-		fetch('/editIngredient', {
-		  method: 'POST',
-		  headers: { 'Content-Type': 'application/json' },
-		  body: JSON.stringify({ oldName: name, newName: newName, newDate: newDate })
-		})
-		.then(response => {
-		  if (response.ok) {
-			alert('Ingredient updated successfully.');
-			fetchIngredients(); // Refresh the ingredients list
-		  } else {
-			alert('Failed to update ingredient.');
-		  }
-		})
-		.catch(error => console.error('Error editing ingredient:', error));
-	  }
-	}
+                  if (!itemsToRestock[lowerCaseItemName]) {
+                    itemsToRestock[lowerCaseItemName] = { lowStock: 0, expiringSoon: 0, expired: 0 };
+                  }
 
-	// Helper function to create the status display string
-	function statusDisplay(statusCounts) {
-	  const statuses = [];
-	  if (statusCounts.lowStock > 0) statuses.push(`Low Stock x${statusCounts.lowStock}`);
-	  if (statusCounts.expiringSoon > 0) statuses.push(`Expiring Soon x${statusCounts.expiringSoon}`);
-	  if (statusCounts.expired > 0) statuses.push(`Expired x${statusCounts.expired}`);
-	  return `(${statuses.join(" / ")})`;
-	}
+                  if (daysUntilExpiry < 0) {
+                    itemsToRestock[lowerCaseItemName].expired += 1;
+                  } else if (daysUntilExpiry <= 3) {
+                    itemsToRestock[lowerCaseItemName].expiringSoon += 1;
+                  } else if (lowerCaseItemName === "milk" && daysUntilExpiry <= 7) {
+                    if (itemsToRestock[lowerCaseItemName].lowStock < 1) {
+                      itemsToRestock[lowerCaseItemName].lowStock += 1;
+                    }
+                  } else {
+                    itemsToRestock[lowerCaseItemName].lowStock += 1;
+                  }
+                }
+              });
 
-	// Helper function to capitalize the first letter of an item name
-	function capitalize(name) {
-	  return name.charAt(0).toUpperCase() + name.slice(1);
-	}
-
-
-	// Shopping List Logic
-	if (shoppingListButton && shoppingListDropdown) {
-	  shoppingListButton.addEventListener('click', function() {
-		// Toggle the 'show' class to show or hide the shopping list
-		shoppingListDropdown.classList.toggle('show');
-
-		// If the shopping list is shown, hide the notifications dropdown
-		if (shoppingListDropdown.classList.contains('show')) {
-		  notificationDropdown.classList.remove('show');
-		}
-
-		// Generate the shopping list only when the dropdown is shown
-		if (shoppingListDropdown.classList.contains('show')) {
-		  generateShoppingList();
-		}
-	  });
-
-    // Function to generate the shopping list
-	function generateShoppingList() {
-	  shoppingListDropdown.innerHTML = ''; // Clear any previous items
-	  const today = new Date();
-	  const itemsToRestock = {}; // Use an object to store item names and status counts
-
-	  // Fetch and parse the CSV file to populate the shopping list
-	  fetch('Ingredients.csv')
-		.then(response => response.text())
-		.then(text => {
-		  Papa.parse(text, {
-			header: true,
-			complete: function(results) {
-			  console.log('Parsed CSV data:', results.data);
-
-			  // Iterate through the parsed CSV data
-			  results.data.forEach(item => {
-				if (!item.name || !item.date) {
-				  console.warn('Skipping invalid item:', item);
-				  return; // Skip invalid items
-				}
-
-				// Convert the item name to lowercase for consistency
-				const lowerCaseItemName = item.name.trim().toLowerCase();
-
-				const entryDate = new Date(item.date.trim());
-
-				// Check if the lowercase item exists in the category map
-				if (categoryMap[lowerCaseItemName]) {
-				  const shelfLife = categoryMap[lowerCaseItemName].shelfLife;
-				  const bestBeforeDate = new Date(entryDate);
-				  bestBeforeDate.setDate(bestBeforeDate.getDate() + shelfLife);
-
-				  const daysUntilExpiry = Math.ceil((bestBeforeDate - today) / (1000 * 3600 * 24));
-
-				  // Initialize the item in itemsToRestock if it doesn't exist
-				  if (!itemsToRestock[lowerCaseItemName]) {
-					itemsToRestock[lowerCaseItemName] = { lowStock: 0, expiringSoon: 0, expired: 0 };
-				  }
-
-				  // Check stock and expiration conditions
-				  if (daysUntilExpiry < 0) {
-					itemsToRestock[lowerCaseItemName].expired += 1;
-				  } else if (daysUntilExpiry <= 3) {
-					itemsToRestock[lowerCaseItemName].expiringSoon += 1;
-				  } else if (lowerCaseItemName === "milk" && daysUntilExpiry <= 7) {
-					// Special case for milk: low stock if <= 1
-					if (itemsToRestock[lowerCaseItemName].lowStock < 1) {
-					  itemsToRestock[lowerCaseItemName].lowStock += 1;
-					}
-				  } else {
-					itemsToRestock[lowerCaseItemName].lowStock += 1;
-				  }
-				} else {
-				  console.warn(`Item '${lowerCaseItemName}' not found in categoryMap.`);
-				}
-			  });
-
-			  // Display the items in the shopping list
-			  const entries = Object.entries(itemsToRestock);
-			  if (entries.length > 0) {
-				entries.forEach(([itemName, statusCounts]) => {
-				  let listItem = document.createElement('li');
-				  listItem.textContent = `${capitalize(itemName)} ${statusDisplay(statusCounts)}`;
-				  shoppingListDropdown.appendChild(listItem);
-				});
-			  } else {
-				shoppingListDropdown.innerHTML = '<li>No items need restocking.</li>';
-			  }
-			},
-			error: function(error) {
-			  console.error('Error parsing CSV:', error);
-			}
-		  });
-		})
-		.catch(error => console.error('Error fetching CSV:', error));
-	}
-  } else {
-    console.error('Shopping list elements not found in the DOM.');
+              const entries = Object.entries(itemsToRestock);
+              if (entries.length > 0) {
+                entries.forEach(([itemName, statusCounts]) => {
+                  let listItem = document.createElement('li');
+                  listItem.textContent = `${capitalize(itemName)} ${statusDisplay(statusCounts)}`;
+                  shoppingListDropdown.appendChild(listItem);
+                });
+              } else {
+                shoppingListDropdown.innerHTML = '<li>No items need restocking.</li>';
+              }
+            },
+            error: function(error) {
+              console.error('Error parsing CSV:', error);
+            }
+          });
+        })
+        .catch(error => console.error('Error fetching CSV:', error));
+    }
   }
 
   document.getElementById('getRecipeButton')?.addEventListener('click', function() {
@@ -379,18 +420,18 @@ document.addEventListener('DOMContentLoaded', function() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ingredients: checkedIngredients.join(', ') }),
     })
-    .then(response => response.json())
-    .then(data => {
-      displayRecipes(data.recipes);
-      document.getElementById('recipeOutput').scrollIntoView({ behavior: 'smooth' });
-    })
-    .catch(error => console.error('Error fetching recipe:', error));
+      .then(response => response.json())
+      .then(data => {
+        displayRecipes(data.recipes);
+        document.getElementById('recipeOutput').scrollIntoView({ behavior: 'smooth' });
+      })
+      .catch(error => console.error('Error fetching recipe:', error));
   });
 
   document.getElementById('clearButton')?.addEventListener('click', function() {
     document.getElementById('recipeOutput').innerHTML = '';
     const checkboxes = document.querySelectorAll('.ingredient-checkbox');
-    checkboxes.forEach(checkbox => checkbox.checked = false);
+    checkboxes.forEach(checkbox => (checkbox.checked = false));
     selectedIngredients.clear();
     localStorage.setItem('selectedIngredients', JSON.stringify([]));
   });
@@ -407,69 +448,59 @@ document.addEventListener('DOMContentLoaded', function() {
     `).join('');
   }
 
-  // Functionality for the Add Items button
   document.getElementById('addButton')?.addEventListener('click', function() {
-  // Prompt for the ingredient name and entry date
-  let ingredientName = prompt('Enter the ingredient name:').toLowerCase().trim();
-  const entryDate = prompt('Enter the entry date (Month-DD-YY):');
+    let ingredientName = prompt('Enter the ingredient name:').toLowerCase().trim();
+    const entryDate = prompt('Enter the entry date (Month-DD-YY):');
+    ingredientName = ingredientName.charAt(0).toUpperCase() + ingredientName.slice(1);
 
-  // Capitalize the first letter of the ingredient name
-  ingredientName = ingredientName.charAt(0).toUpperCase() + ingredientName.slice(1);
+    if (ingredientName && entryDate) {
+      fetch('/addIngredient', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: ingredientName, date: entryDate }),
+      })
+        .then(response => {
+          if (response.ok) {
+            alert('Ingredient added successfully.');
+            fetchIngredients();
+          } else {
+            alert('Failed to add ingredient.');
+          }
+        })
+        .catch(error => console.error('Error adding ingredient:', error));
+    } else {
+      alert('Invalid input. Please try again.');
+    }
+  });
 
-  if (ingredientName && entryDate) {
-    // Make a request to add the ingredient
-    fetch('/addIngredient', {
+  function formatDate(date) {
+    const dateObj = new Date(date);
+    const month = dateObj.toLocaleString('en-US', { month: 'short' });
+    const day = String(dateObj.getDate()).padStart(2, '0');
+    const year = String(dateObj.getFullYear()).slice(-2);
+    return `${month}-${day}-${year}`;
+  }
+
+  function calculateBestBeforeDate(entryDate, shelfLife) {
+    const date = new Date(entryDate);
+    date.setDate(date.getDate() + shelfLife);
+    return date.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: '2-digit' }).replace(' ', '-');
+  }
+
+  function removeIngredientDate(name, date) {
+    fetch('/removeIngredientDate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name: ingredientName,
-        date: entryDate
+      body: JSON.stringify({ ingredient: name, date: date }),
+    })
+      .then(response => {
+        if (response.ok) {
+          alert('Ingredient removed successfully.');
+          fetchIngredients();
+        } else {
+          alert('Failed to remove ingredient.');
+        }
       })
-    })
-    .then(response => {
-      if (response.ok) {
-        alert('Ingredient added successfully.');
-        fetchIngredients(); // Refresh the ingredients list
-      } else {
-        alert('Failed to add ingredient.');
-      }
-    })
-    .catch(error => console.error('Error adding ingredient:', error));
-  } else {
-    alert("Invalid input. Please try again.");
+      .catch(error => console.error('Error removing ingredient:', error));
   }
-});
-
-// Function to format the date as "MMM-DD-YY"
-function formatDate(date) {
-  const dateObj = new Date(date);
-  const month = dateObj.toLocaleString('en-US', { month: 'short' }); // Get the abbreviated month
-  const day = String(dateObj.getDate()).padStart(2, '0'); // Ensure two-digit day
-  const year = String(dateObj.getFullYear()).slice(-2); // Get the last two digits of the year
-
-  return `${month}-${day}-${year}`; // Construct the formatted date string
-}
-  
-  const BASE_URL = 'http://localhost:3000/';
-
-  document.getElementById('aboutButton')?.addEventListener('click', function() {
-    window.location.href = `${BASE_URL}About.html`;
-  });
-
-  document.getElementById('contactButton')?.addEventListener('click', function() {
-    window.location.href = `${BASE_URL}Contact.html`;
-  });
-
-  document.getElementById('productsButton')?.addEventListener('click', function() {
-    window.location.href = `${BASE_URL}MyIngredients.html`;
-  });
-
-  document.getElementById('goBackButton')?.addEventListener('click', function() {
-    window.location.href = BASE_URL;
-  });
-
-  document.getElementById('learnMoreButton')?.addEventListener('click', function() {
-    const windowHeight = window.innerHeight;
-    window.scrollTo({ top: windowHeight, behavior: 'smooth' });
-  });
 });

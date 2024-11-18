@@ -290,3 +290,29 @@ label {
 #shoppingListDropdown li {
   margin-bottom: 5px;
 }
+
+.modal {
+  display: none; /* Hidden by default */
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background-color: white;
+  padding: 20px;
+  border: 1px solid #ccc;
+  z-index: 1000;
+}
+
+.modal.show {
+  display: block;
+}
+
+.item-row {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.item-name-input, .item-quantity-input {
+  padding: 5px;
+}

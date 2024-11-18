@@ -6,6 +6,8 @@ import bodyParser from 'body-parser';
 import fs from 'fs';
 import csvParser from 'csv-parser';
 import sqlite3 from 'sqlite3';
+import http from 'http';
+import { Server } from 'socket.io';
 
 dotenv.config();
 
@@ -13,6 +15,9 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
+const server = http.createServer(app);
+const io = new Server(server);
+
 const port = 3000;
 
 const categoryMap = {
@@ -29,11 +34,8 @@ const categoryMap = {
   "bacon": { category: "Meat", shelfLife: 14 },
   "bread": { category: "Baked Goods", shelfLife: 4 },
   "cereal": { category: "Packaged Goods", shelfLife: 30 }
-  // Add more items as needed
 };
 
-
-// Connect to SQLite Database
 const dbPath = path.join(__dirname, 'recipes.db');
 const db = new sqlite3.Database(dbPath, (err) => {
   if (err) {
@@ -75,244 +77,177 @@ app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// Handle get recipe request with specific ingredients
-app.post('/getRecipe', async (req, res) => {
+// Handle get recipe request
+app.post('/getRecipe', (req, res) => {
   const { ingredients } = req.body;
   const selectedIngredients = ingredients.split(',').map(ing => ing.trim().toLowerCase());
 
-  try {
-    // Query the database for all recipes
-    const db = new sqlite3.Database('recipes.db');
-    db.all('SELECT * FROM recipes', [], (err, rows) => {
-      if (err) {
-        console.error('Error querying the database:', err);
-        res.status(500).send('Error querying the database');
-        return;
-      }
-
-      // Filter recipes based on the ingredients
-      const filteredRecipes = rows
-        .map(recipe => {
-          if (!recipe.ingredients || typeof recipe.ingredients !== 'string') {
-            // Skip if ingredients are missing or not a string
-            return null;
-          }
-
-          try {
-            // Parse the ingredients string into an array
-            const recipeIngredients = JSON.parse(recipe.ingredients.replace(/'/g, '"')).map(ing => ing.toLowerCase());
-            const matchingIngredients = recipeIngredients.filter(ing =>
-              selectedIngredients.some(selected => ing.includes(selected))
-            );
-            const extraIngredients = recipeIngredients.filter(ing =>
-              !selectedIngredients.some(selected => ing.includes(selected))
-            );
-
-            return {
-              ...recipe,
-              recipeIngredients,
-              extraIngredients,
-              matchingIngredientsCount: matchingIngredients.length,
-              extraIngredientsCount: extraIngredients.length
-            };
-          } catch (parseError) {
-            console.error('Error parsing ingredients:', parseError);
-            return null; // Skip this recipe if there's an error
-          }
-        })
-        .filter(recipe => recipe !== null && recipe.matchingIngredientsCount > 0 && recipe.extraIngredientsCount <= 2) // Limit to recipes with matching ingredients and 2 or fewer extra ingredients
-        .sort((a, b) => b.matchingIngredientsCount - a.matchingIngredientsCount); // Sort by the most matching ingredients
-
-      // Limit the result to the top 5 recipes
-      const topRecipes = filteredRecipes.slice(0, 5);
-
-      res.json({ recipes: topRecipes });
-    });
-  } catch (error) {
-    console.error('Error processing request:', error);
-    res.status(500).send('Error processing request');
-  }
-});
-
-// Endpoint to remove a specific ingredient by name and date
-app.post('/removeIngredientDate', async (req, res) => {
-  const { ingredient, date } = req.body;
-
-  const filePath = path.join(__dirname, 'public', 'Ingredients.csv');
-
-  fs.readFile(filePath, 'utf8', (err, data) => {
+  db.all('SELECT * FROM recipes', [], (err, rows) => {
     if (err) {
-      console.error('Error reading file:', err);
-      return res.status(500).send('Error reading file');
+      console.error('Error querying the database:', err);
+      res.status(500).send('Error querying the database');
+      return;
     }
 
-    let lines = data.split('\n').filter(Boolean);
-    let ingredients = lines.slice(1).map(line => line.split(',')[0].trim());
-    let dates = lines.slice(1).map(line => line.split(',')[1].trim());
+    const filteredRecipes = rows
+      .map(recipe => {
+        if (!recipe.ingredients || typeof recipe.ingredients !== 'string') return null;
+        try {
+          const recipeIngredients = JSON.parse(recipe.ingredients.replace(/'/g, '"')).map(ing => ing.toLowerCase());
+          const matchingIngredients = recipeIngredients.filter(ing => selectedIngredients.some(selected => ing.includes(selected)));
+          const extraIngredients = recipeIngredients.filter(ing => !selectedIngredients.some(selected => ing.includes(selected)));
 
-    const matchingIndices = ingredients.reduce((acc, name, idx) => {
-      if (name === ingredient && dates[idx] === date) acc.push(idx);
-      return acc;
-    }, []);
+          return {
+            ...recipe,
+            matchingIngredientsCount: matchingIngredients.length,
+            extraIngredientsCount: extraIngredients.length,
+            extraIngredients
+          };
+        } catch (error) {
+          console.error('Error parsing ingredients:', error);
+          return null;
+        }
+      })
+      .filter(recipe => recipe && recipe.matchingIngredientsCount > 0 && recipe.extraIngredientsCount <= 2)
+      .sort((a, b) => b.matchingIngredientsCount - a.matchingIngredientsCount);
 
-    if (matchingIndices.length) {
-      let indexToRemove = matchingIndices[0]; // Only removing the first found match
-      ingredients.splice(indexToRemove, 1);
-      dates.splice(indexToRemove, 1);
-    }
-
-    const updatedData = ['name,date', ...ingredients.map((ing, i) => `${ing},${dates[i]}`)].join('\n');
-
-    fs.writeFile(filePath, updatedData, 'utf8', (err) => {
-      if (err) {
-        console.error('Error writing file:', err);
-        return res.status(500).send('Error writing file');
-      }
-
-      res.send('Ingredient list updated successfully');
-    });
+    res.json({ recipes: filteredRecipes.slice(0, 5) });
   });
 });
 
+// Endpoint to remove an ingredient
+app.post('/removeIngredientDate', (req, res) => {
+  const { ingredient } = req.body;
 
-// Endpoint to edit an ingredient
-app.post('/editIngredient', async (req, res) => {
-  const { oldName, newName } = req.body;
-  try {
-    const data = await readCSV();
-    const updatedData = data.map(item => {
-      if (item.name === oldName) {
-        return { name: newName };
-      }
-      return item;
-    });
-    writeCSV(updatedData);
-    res.status(200).send('Ingredient updated successfully');
-  } catch (error) {
-    console.error('Error editing ingredient:', error);
-    res.status(500).send('Failed to edit ingredient');
-  }
-});
-
-function calculateBestBeforeDate(entryDate, shelfLife) {
-	  const date = new Date(entryDate);
-	  date.setDate(date.getDate() + shelfLife);
-	  return date.toLocaleDateString("en-US", { month: "short", day: "2-digit", year: "2-digit" }).replace(' ', '-');
-	}
-
-// Endpoint to add a new ingredient
-app.post('/addIngredient', (req, res) => {
-  const { name, date } = req.body;
-  const filePath = path.join(__dirname, 'public', 'Ingredients.csv');
-
-  fs.readFile(filePath, 'utf8', (err, data) => {
-    if (err) {
-      console.error('Error reading file:', err);
-      return res.status(500).send('Error reading file');
-    }
-
-    // Ensure that the name is consistently capitalized
-    const capitalizedName = name.charAt(0).toUpperCase() + name.slice(1);
-
-    // Format the date using the formatDate function
-    const formattedDate = formatDate(date);
-
-    // Prepare the new line to be added
-    const newLine = `\n${capitalizedName},${formattedDate}`;
-
-    const updatedData = data + newLine;
-    fs.writeFile(filePath, updatedData, 'utf8', (err) => {
-      if (err) {
-        console.error('Error writing to file:', err);
-        return res.status(500).send('Error writing to file');
-      }
-
-      res.status(200).send('Ingredient added successfully');
-    });
-  });
-});
-
-// Function to format the date as "MMM-DD-YY"
-function formatDate(date) {
-  const dateObj = new Date(date);
-  const month = dateObj.toLocaleString('en-US', { month: 'short' }); // Get the abbreviated month
-  const day = String(dateObj.getDate()).padStart(2, '0'); // Ensure two-digit day
-  const year = String(dateObj.getFullYear()).slice(-2); // Get the last two digits of the year
-
-  return `${month}-${day}-${year}`; // Construct the formatted date string
-}
-
-app.use(express.json());
-app.post('/api/data', (req, res) => {
-  const ingredient = req.body.ingredient;
-  const value = req.body.value;
-
-  const currentDate = new Date();
-  const formattedDate = formatDate(currentDate);
-
-  const filePath = path.join(__dirname, 'public', 'Ingredients.csv');
-
-  fs.readFile(filePath, 'utf8', (err, data) => {
+  fs.readFile(csvFilePath, 'utf8', (err, data) => {
     if (err) {
       console.error('Error reading file:', err);
       res.status(500).send('Error reading file');
       return;
     }
 
-    let lines = data.split('\n').filter(Boolean);
-    let ingredients = [];
-    let dates = [];
+    const lines = data.split('\n').filter(Boolean);
+    
+    // Parse the lines and filter for entries that match the ingredient
+    const matchingLines = lines
+      .slice(1) // Skip the header line
+      .map((line, index) => {
+        const [name, date] = line.split(',');
+        return { name: name.trim(), date: new Date(date.trim()), index: index + 1 };
+      })
+      .filter(item => item.name.toLowerCase() === ingredient.toLowerCase());
 
-    lines.slice(1).forEach(line => {
-      let [name, date] = line.split(',');
-      ingredients.push(name.trim());
-      dates.push(date.trim());
-    });
+    // If there are matching lines, find the oldest one
+    if (matchingLines.length > 0) {
+      // Sort the matching lines by date in ascending order (oldest first)
+      matchingLines.sort((a, b) => a.date - b.date);
 
-    if (value === "true") {
-      ingredients.push(ingredient);
-      dates.push(formattedDate);
-    } else if (value === "false") {
-      const indices = ingredients.reduce((acc, curr, index) => {
-        if (curr === ingredient) acc.push(index);
-        return acc;
-      }, []);
+      // Get the index of the oldest entry in the original lines array
+      const indexToRemove = matchingLines[0].index;
 
-      if (indices.length > 0) {
-        let oldestIndex = indices[0];
-        let oldestDate = dates[oldestIndex];
-
-        for (let i = 1; i < indices.length; i++) {
-          const currentIndex = indices[i];
-          if (dates[currentIndex] < oldestDate) {
-            oldestDate = dates[currentIndex];
-            oldestIndex = currentIndex;
-          }
-        }
-
-        ingredients.splice(oldestIndex, 1);
-        dates.splice(oldestIndex, 1);
-      }
+      // Remove the oldest line from the lines array
+      lines.splice(indexToRemove, 1);
     }
 
-    let outputLines = ['name,date'];
-    for (let i = 0; i < ingredients.length; i++) {
-      outputLines.push(`${ingredients[i]},${dates[i]}`);
-    }
-
-    fs.writeFile(filePath, outputLines.join('\n'), 'utf8', (err) => {
+    fs.writeFile(csvFilePath, lines.join('\n'), 'utf8', (err) => {
       if (err) {
         console.error('Error writing file:', err);
         res.status(500).send('Error writing file');
         return;
       }
-
-      res.send('Ingredient list updated successfully');
+      res.send('Ingredient removed successfully');
     });
   });
 });
 
-// Start the server
-app.listen(port, '0.0.0.0', () => {
+
+
+// Endpoint to edit an ingredient
+app.post('/editIngredient', (req, res) => {
+  const { oldName, newName } = req.body;
+  readCSV().then(data => {
+    const updatedData = data.map(item => (item.name === oldName ? { name: newName, date: item.date } : item));
+    writeCSV(updatedData);
+    res.status(200).send('Ingredient updated successfully');
+  }).catch(error => {
+    console.error('Error editing ingredient:', error);
+    res.status(500).send('Failed to edit ingredient');
+  });
+});
+
+// Endpoint to add a new ingredient
+app.post('/addIngredient', (req, res) => {
+  const { name, date } = req.body;
+  const capitalizedName = name.charAt(0).toUpperCase() + name.slice(1);
+  const formattedDate = formatDate(date);
+
+  fs.appendFile(csvFilePath, `\n${capitalizedName},${formattedDate}`, 'utf8', (err) => {
+    if (err) {
+      console.error('Error writing to file:', err);
+      res.status(500).send('Error writing to file');
+      return;
+    }
+    res.status(200).send('Ingredient added successfully');
+  });
+});
+
+// Endpoint to receive items with "true/false" status
+app.post('/receiveItemsStatus', (req, res) => {
+  const itemsStatus = req.body; // Example: { "Apple": true, "Banana": true }
+  
+  console.log('Received items with status:', itemsStatus);
+  
+  // Emit the sessionComplete event to notify the client
+  io.emit('sessionComplete', itemsStatus);
+
+  // Respond to the client indicating the items were received successfully
+  res.send('Items received successfully without writing to CSV.');
+});
+
+// Endpoint to receive confirmed items and write to CSV
+app.post('/addConfirmedItems', (req, res) => {
+  const confirmedItems = req.body; // Expecting an array of { name, date } objects
+
+  fs.readFile(csvFilePath, 'utf8', (err, data) => {
+    if (err) {
+      console.error('Error reading CSV file:', err);
+      return res.status(500).send('Error reading CSV file');
+    }
+
+    // Prepare the new lines to be added to the CSV
+    const newLines = confirmedItems.map(item => `${item.name},${item.date}`);
+
+    // Append the new lines to the existing data
+    const updatedData = data.trim() + '\n' + newLines.join('\n');
+
+    fs.writeFile(csvFilePath, updatedData, 'utf8', (err) => {
+      if (err) {
+        console.error('Error writing to CSV file:', err);
+        return res.status(500).send('Error writing to CSV file');
+      }
+
+      res.send('Items confirmed and added successfully.');
+    });
+  });
+});
+
+// Function to format the date
+function formatDate(date) {
+  const dateObj = new Date(date);
+  const month = dateObj.toLocaleString('en-US', { month: 'short' });
+  const day = String(dateObj.getDate()).padStart(2, '0');
+  const year = String(dateObj.getFullYear()).slice(-2);
+  return `${month}-${day}-${year}`;
+}
+
+// Socket.io setup
+io.on('connection', (socket) => {
+  console.log('A user connected');
+  socket.on('disconnect', () => {
+    console.log('User disconnected');
+  });
+});
+
+server.listen(port, '0.0.0.0', () => {
   console.log(`Server is running on http://localhost:${port}`);
 });
