@@ -20,6 +20,10 @@ const io = new Server(server);
 
 const port = 3000;
 
+app.use(express.static('public'));
+app.use(express.json());
+app.use(bodyParser.json());
+
 let operationQueue = Promise.resolve();
 
 function queueOperation(operation) {
@@ -51,9 +55,6 @@ const db = new sqlite3.Database(dbPath, (err) => {
     console.log('Connected to the SQLite database.');
   }
 });
-
-app.use(express.static('public'));
-app.use(bodyParser.json());
 
 const csvFilePath = path.join(__dirname, 'public', 'Ingredients.csv');
 

@@ -52,8 +52,6 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   });
 
-  // Check if on MyIngredients.html page
-  if (document.body.classList.contains('my-ingredients-page')) {
     const notificationBell = document.getElementById('notificationBell');
 	  const notificationSound = document.getElementById('notificationSound');
 	  const dropdownMenu = document.getElementById('notificationDropdown');
@@ -64,6 +62,7 @@ document.addEventListener('DOMContentLoaded', function() {
 	  const exitSessionReviewButton = document.getElementById('exitSessionReviewButton');
 
 	  let notificationSoundPlayed = false;
+    localStorage.removeItem('selectedIngredients');
 	  let selectedIngredients = new Set(JSON.parse(localStorage.getItem('selectedIngredients')) || []);
 	  let expandedIngredients = new Set(JSON.parse(localStorage.getItem('expandedIngredients')) || []);
 
@@ -401,6 +400,7 @@ document.addEventListener('DOMContentLoaded', function() {
 	if (showSessionModal === 'true') {
 	  localStorage.removeItem('showSessionModal'); // Clear the flag
 	  const newItemsData = JSON.parse(localStorage.getItem('newItemsData') || '{}');
+    console.log("Triggering modal with data:", newItemsData);
 	  showSessionReviewModal(newItemsData);
 	}
 
@@ -509,7 +509,6 @@ document.addEventListener('DOMContentLoaded', function() {
         })
         .catch(error => console.error('Error fetching CSV:', error));
     }
-  }
 
   document.getElementById('getRecipeButton')?.addEventListener('click', function() {
     const checkedIngredients = Array.from(selectedIngredients);
