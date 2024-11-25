@@ -12,6 +12,7 @@ document.addEventListener('DOMContentLoaded', function() {
     "cabbage": { category: "Vegetables", shelfLife: 7 },
     "bacon": { category: "Meat", shelfLife: 14 },
     "bread": { category: "Baked Goods", shelfLife: 4 },
+    "Dark Chocolate Hazelnut Bar": { category: "Packaged Goods", shelfLife: 30 },
     "cereal": { category: "Packaged Goods", shelfLife: 30 }
   };
 
@@ -41,16 +42,32 @@ document.addEventListener('DOMContentLoaded', function() {
     window.scrollTo({ top: windowHeight, behavior: 'smooth' });
   });
 
+  async function fetchProductNameFromBarcode(barcode) {
+    try {
+      const response = await fetch(`${BASE_URL}getProductNameFromBarcode/${barcode}`);
+      if (response.ok) {
+        const data = await response.json();
+        return data.name;
+      }
+    } catch (error) {
+      console.error('Error fetching product name:', error);
+    }
+    return `Unknown Product (${barcode})`;
+  }
+  
+
   // Global notification logic for session completion
   socket.on('sessionComplete', function(newItems) {
     alert('A session has completed. Click to review items.');
-
+  
     if (confirm('Do you want to view your items now?')) {
       localStorage.setItem('showSessionModal', 'true');
       localStorage.setItem('newItemsData', JSON.stringify(newItems));
       window.location.href = `${BASE_URL}MyIngredients.html`;
     }
   });
+  
+  
 
     const notificationBell = document.getElementById('notificationBell');
 	  const notificationSound = document.getElementById('notificationSound');
@@ -83,6 +100,7 @@ document.addEventListener('DOMContentLoaded', function() {
           Papa.parse(text, {
             header: true,
             complete: function(results) {
+              // console.log('Parsed Results:', results);
               results.data.forEach(item => {
                 if (!item.best_before_date || item.best_before_date.trim() === "") {
                   const category = categoryMap[item.name.toLowerCase()];
@@ -91,7 +109,6 @@ document.addEventListener('DOMContentLoaded', function() {
                   }
                 }
               });
-
               displayIngredients(results.data);
               checkForExpiringItems(results.data);
             },
@@ -195,108 +212,115 @@ document.addEventListener('DOMContentLoaded', function() {
 	let itemsToRemove = [];
 
 	// Function to show the session review modal
-	function showSessionReviewModal(newItems) {
-	  sessionItemsContainer.innerHTML = ''; // Clear previous items
-	  itemsToInsert = []; // Clear itemsToInsert array for fresh session
-	  itemsToRemove = []; // Clear itemsToRemove array for fresh session
-	  const itemCounts = {};
+async function showSessionReviewModal(items) {
+  sessionItemsContainer.innerHTML = ''; // Clear previous items
+  itemsToInsert = []; // Clear itemsToInsert array for fresh session
+  itemsToRemove = []; // Clear itemsToRemove array for fresh session
+  const itemCounts = {};
 
-	  // Count the quantities for each item and prepare the display
-	  Object.entries(newItems).forEach(([itemName, status]) => {
-		if (itemCounts[itemName]) {
-		  itemCounts[itemName].count += 1;
-		} else {
-		  itemCounts[itemName] = { count: 1, status };
-		}
-	  });
+  // Wait for barcode lookups and prepare item data
+  await Promise.all(items.map(async (item) => {
+    let { name, barcode, direction } = item;
 
-	  totalItems = Object.keys(itemCounts).length; // Set totalItems count
-	  itemsConfirmedCount = 0; // Reset confirmed items count
+    if (!name && barcode) {
+      // Fetch the name for the barcode
+      name = await fetchProductNameFromBarcode(barcode);
+    }
 
-	  // Populate the modal with the items
-	  Object.entries(itemCounts).forEach(([itemName, itemData]) => {
-		const itemRow = document.createElement('div');
-		itemRow.classList.add('item-row');
+    if (itemCounts[name]) {
+      itemCounts[name].count += 1;
+    } else {
+      itemCounts[name] = { count: 1, status: direction };
+    }
+  }));
 
-		// Create a non-editable text span for the item name
-		const nameSpan = document.createElement('span');
-		nameSpan.textContent = itemName;
-		nameSpan.classList.add('item-name-span');
+  totalItems = Object.keys(itemCounts).length; // Set totalItems count
+  itemsConfirmedCount = 0; // Reset confirmed items count
 
-		// Create an editable text input (hidden by default)
-		const nameInput = document.createElement('input');
-		nameInput.type = 'text';
-		nameInput.value = itemName;
-		nameInput.classList.add('item-name-input');
-		nameInput.style.display = 'none'; // Hide initially
+  // Populate the modal with the items
+  Object.entries(itemCounts).forEach(([itemName, itemData]) => {
+    const itemRow = document.createElement('div');
+    itemRow.classList.add('item-row');
 
-		// Create a dropdown to choose status (Going IN / Going OUT)
-		const statusDropdown = document.createElement('select');
-		const inOption = new Option('Going IN', 'in', false, itemData.status === true);
-		const outOption = new Option('Going OUT', 'out', false, itemData.status === false);
-		statusDropdown.append(inOption, outOption);
-		statusDropdown.classList.add('item-status-dropdown');
+    // Create a non-editable text span for the item name
+    const nameSpan = document.createElement('span');
+    nameSpan.textContent = itemName;
+    nameSpan.classList.add('item-name-span');
 
-		// Create the Edit button
-		const editButton = document.createElement('button');
-		editButton.textContent = 'Edit';
-		editButton.classList.add('edit-button');
-		editButton.addEventListener('click', () => {
-		  nameSpan.style.display = 'none'; // Hide the span
-		  nameInput.style.display = 'inline'; // Show the input
-		  nameInput.disabled = false; // Make the input editable
-		  editButton.style.display = 'none'; // Hide the Edit button
-		});
+    // Create an editable text input (hidden by default)
+    const nameInput = document.createElement('input');
+    nameInput.type = 'text';
+    nameInput.value = itemName;
+    nameInput.classList.add('item-name-input');
+    nameInput.style.display = 'none'; // Hide initially
 
-		// Create the Confirm button
-		const confirmButton = document.createElement('button');
-		confirmButton.textContent = 'Confirm';
-		confirmButton.classList.add('confirm-button');
-		confirmButton.addEventListener('click', () => {
-		  // Confirm the item and update the UI
-		  nameInput.disabled = true; // Make the input non-editable
-		  nameInput.style.display = 'none'; // Hide the input
-		  nameSpan.textContent = nameInput.value.trim(); // Update the span text
-		  nameSpan.style.display = 'inline'; // Show the span
-		  nameSpan.classList.add('centered'); // Center the text
-		  confirmButton.style.display = 'none'; // Hide the Confirm button
-		  editButton.style.display = 'none'; // Hide the Edit button
+    // Create a dropdown to choose status (Going IN / Going OUT)
+    const statusDropdown = document.createElement('select');
+    const inOption = new Option('Going IN', 'in', false, itemData.status === "in");
+    const outOption = new Option('Going OUT', 'out', false, itemData.status === "out");
+    statusDropdown.append(inOption, outOption);
+    statusDropdown.classList.add('item-status-dropdown');
 
-		  // Determine the status from the dropdown and push items to respective arrays
-		  const status = statusDropdown.value === 'in' ? true : false;
+    // Create the Edit button
+    const editButton = document.createElement('button');
+    editButton.textContent = 'Edit';
+    editButton.classList.add('edit-button');
+    editButton.addEventListener('click', () => {
+      nameSpan.style.display = 'none'; // Hide the span
+      nameInput.style.display = 'inline'; // Show the input
+      nameInput.disabled = false; // Make the input editable
+      editButton.style.display = 'none'; // Hide the Edit button
+    });
 
-		  if (status === true) {
-			// Add item to itemsToInsert array for server submission
-			itemsToInsert.push({
-			  name: nameInput.value.trim(),
-			  date: formatDate(new Date()), // Use formatDate function for correct date format
-			});
-			console.log("Item added to insert array:", itemsToInsert);
-		  } else if (status === false) {
-			// Add item to itemsToRemove array for server submission
-			itemsToRemove.push({
-			  name: nameInput.value.trim(),
-			});
-			console.log("Item added to remove array:", itemsToRemove);
-		  }
+    // Create the Confirm button
+    const confirmButton = document.createElement('button');
+    confirmButton.textContent = 'Confirm';
+    confirmButton.classList.add('confirm-button');
+    confirmButton.addEventListener('click', () => {
+      // Confirm the item and update the UI
+      nameInput.disabled = true; // Make the input non-editable
+      nameInput.style.display = 'none'; // Hide the input
+      nameSpan.textContent = nameInput.value.trim(); // Update the span text
+      nameSpan.style.display = 'inline'; // Show the span
+      nameSpan.classList.add('centered'); // Center the text
+      confirmButton.style.display = 'none'; // Hide the Confirm button
+      editButton.style.display = 'none'; // Hide the Edit button
 
-		  itemsConfirmedCount++;
-		  if (itemsConfirmedCount === totalItems) {
-			exitSessionReviewButton.disabled = false; // Enable Close button
-		  }
-		});
+      // Determine the status from the dropdown and push items to respective arrays
+      const status = statusDropdown.value === 'in' ? true : false;
 
-		// Append elements to the item row
-		itemRow.appendChild(nameSpan);
-		itemRow.appendChild(nameInput);
-		itemRow.appendChild(statusDropdown);
-		itemRow.appendChild(editButton);
-		itemRow.appendChild(confirmButton);
-		sessionItemsContainer.appendChild(itemRow);
-	  });
+      if (status === true) {
+        // Add item to itemsToInsert array for server submission
+        itemsToInsert.push({
+          name: nameInput.value.trim(),
+          date: formatDate(new Date()), // Use formatDate function for correct date format
+        });
+        console.log("Item added to insert array:", itemsToInsert);
+      } else if (status === false) {
+        // Add item to itemsToRemove array for server submission
+        itemsToRemove.push({
+          name: nameInput.value.trim(),
+        });
+        console.log("Item added to remove array:", itemsToRemove);
+      }
 
-	  // Show the modal
-	  sessionModal.classList.add('show');
+      itemsConfirmedCount++;
+      if (itemsConfirmedCount === totalItems) {
+        exitSessionReviewButton.disabled = false; // Enable Close button
+      }
+    });
+
+    // Append elements to the item row
+    itemRow.appendChild(nameSpan);
+    itemRow.appendChild(nameInput);
+    itemRow.appendChild(statusDropdown);
+    itemRow.appendChild(editButton);
+    itemRow.appendChild(confirmButton);
+    sessionItemsContainer.appendChild(itemRow);
+  });
+
+  // Show the modal
+  sessionModal.classList.add('show');
 
 	  // Close button logic in the modal
 	  exitSessionReviewButton.addEventListener('click', function () {
@@ -395,15 +419,20 @@ document.addEventListener('DOMContentLoaded', function() {
 		});
 	}
 
-	// Check if the session review modal should be shown after session completion
-	const showSessionModal = localStorage.getItem('showSessionModal');
-	if (showSessionModal === 'true') {
-	  localStorage.removeItem('showSessionModal'); // Clear the flag
-	  const newItemsData = JSON.parse(localStorage.getItem('newItemsData') || '{}');
-    console.log("Triggering modal with data:", newItemsData);
-	  showSessionReviewModal(newItemsData);
-	}
+// Check if the session review modal should be shown after session completion
+const showSessionModal = localStorage.getItem('showSessionModal');
+if (showSessionModal === 'true') {
+  localStorage.removeItem('showSessionModal'); // Clear the flag
+  const newItemsData = JSON.parse(localStorage.getItem('newItemsData') || '{}');
+  console.log("Retrieved items from localStorage:", newItemsData);
 
+  // Check if newItemsData has 'items' that is an array
+  if (newItemsData && newItemsData.items && Array.isArray(newItemsData.items)) {
+    showSessionReviewModal(newItemsData.items); // Pass only the items array to the modal
+  } else {
+    console.error("Invalid items data for session review:", newItemsData);
+  }
+}
 
     function checkForExpiringItems(data) {
       const today = new Date();
@@ -452,63 +481,87 @@ document.addEventListener('DOMContentLoaded', function() {
       }
     });
 
-    function generateShoppingList() {
-      shoppingListDropdown.innerHTML = '';
-      const today = new Date();
-      const itemsToRestock = {};
+// Helper function to create the status display string
+function statusDisplay(statusCounts) {
+  const statuses = [];
+  if (statusCounts.lowStock > 0) statuses.push(`Low Stock x${statusCounts.lowStock}`);
+  if (statusCounts.expiringSoon > 0) statuses.push(`Expiring Soon x${statusCounts.expiringSoon}`);
+  if (statusCounts.expired > 0) statuses.push(`Expired x${statusCounts.expired}`);
+  return `(${statuses.join(" / ")})`;
+}
+// Helper function to capitalize the first letter of an item name
+function capitalize(name) {
+  return name.charAt(0).toUpperCase() + name.slice(1);
+}
 
-      fetch('Ingredients.csv')
-        .then(response => response.text())
-        .then(text => {
-          Papa.parse(text, {
-            header: true,
-            complete: function(results) {
-              results.data.forEach(item => {
-                if (!item.name || !item.date) return;
-                const lowerCaseItemName = item.name.trim().toLowerCase();
-                const entryDate = new Date(item.date.trim());
-                if (categoryMap[lowerCaseItemName]) {
-                  const shelfLife = categoryMap[lowerCaseItemName].shelfLife;
-                  const bestBeforeDate = new Date(entryDate);
-                  bestBeforeDate.setDate(bestBeforeDate.getDate() + shelfLife);
-                  const daysUntilExpiry = Math.ceil((bestBeforeDate - today) / (1000 * 3600 * 24));
-
-                  if (!itemsToRestock[lowerCaseItemName]) {
-                    itemsToRestock[lowerCaseItemName] = { lowStock: 0, expiringSoon: 0, expired: 0 };
-                  }
-
-                  if (daysUntilExpiry < 0) {
-                    itemsToRestock[lowerCaseItemName].expired += 1;
-                  } else if (daysUntilExpiry <= 3) {
-                    itemsToRestock[lowerCaseItemName].expiringSoon += 1;
-                  } else if (lowerCaseItemName === "milk" && daysUntilExpiry <= 7) {
-                    if (itemsToRestock[lowerCaseItemName].lowStock < 1) {
-                      itemsToRestock[lowerCaseItemName].lowStock += 1;
-                    }
-                  } else {
-                    itemsToRestock[lowerCaseItemName].lowStock += 1;
-                  }
-                }
-              });
-
-              const entries = Object.entries(itemsToRestock);
-              if (entries.length > 0) {
-                entries.forEach(([itemName, statusCounts]) => {
-                  let listItem = document.createElement('li');
-                  listItem.textContent = `${capitalize(itemName)} ${statusDisplay(statusCounts)}`;
-                  shoppingListDropdown.appendChild(listItem);
-                });
-              } else {
-                shoppingListDropdown.innerHTML = '<li>No items need restocking.</li>';
-              }
-            },
-            error: function(error) {
-              console.error('Error parsing CSV:', error);
-            }
-          });
-        })
-        .catch(error => console.error('Error fetching CSV:', error));
-    }
+  // Function to generate the shopping list
+	function generateShoppingList() {
+	  shoppingListDropdown.innerHTML = ''; // Clear any previous items
+	  const today = new Date();
+	  const itemsToRestock = {}; // Use an object to store item names and status counts
+	  // Fetch and parse the CSV file to populate the shopping list
+	  fetch('Ingredients.csv')
+		.then(response => response.text())
+		.then(text => {
+		  Papa.parse(text, {
+			header: true,
+			complete: function(results) {
+			  // console.log('Parsed CSV data:', results.data);
+			  // Iterate through the parsed CSV data
+			  results.data.forEach(item => {
+				if (!item.name || !item.date) {
+				  console.warn('Skipping invalid item:', item);
+				  return; // Skip invalid items
+				}
+				// Convert the item name to lowercase for consistency
+				const lowerCaseItemName = item.name.trim().toLowerCase();
+				const entryDate = new Date(item.date.trim());
+				// Check if the lowercase item exists in the category map
+				if (categoryMap[lowerCaseItemName]) {
+				  const shelfLife = categoryMap[lowerCaseItemName].shelfLife;
+				  const bestBeforeDate = new Date(entryDate);
+				  bestBeforeDate.setDate(bestBeforeDate.getDate() + shelfLife);
+				  const daysUntilExpiry = Math.ceil((bestBeforeDate - today) / (1000 * 3600 * 24));
+				  // Initialize the item in itemsToRestock if it doesn't exist
+				  if (!itemsToRestock[lowerCaseItemName]) {
+					itemsToRestock[lowerCaseItemName] = { lowStock: 0, expiringSoon: 0, expired: 0 };
+				  }
+				  // Check stock and expiration conditions
+				  if (daysUntilExpiry < 0) {
+					itemsToRestock[lowerCaseItemName].expired += 1;
+				  } else if (daysUntilExpiry <= 3) {
+					itemsToRestock[lowerCaseItemName].expiringSoon += 1;
+				  } else if (lowerCaseItemName === "milk" && daysUntilExpiry <= 7) {
+					// Special case for milk: low stock if <= 1
+					if (itemsToRestock[lowerCaseItemName].lowStock < 1) {
+					  itemsToRestock[lowerCaseItemName].lowStock += 1;
+					}
+				  } else {
+					itemsToRestock[lowerCaseItemName].lowStock += 1;
+				  }
+				} else {
+				  console.warn(`Item '${lowerCaseItemName}' not found in categoryMap.`);
+				}
+			  });
+			  // Display the items in the shopping list
+			  const entries = Object.entries(itemsToRestock);
+			  if (entries.length > 0) {
+				entries.forEach(([itemName, statusCounts]) => {
+				  let listItem = document.createElement('li');
+				  listItem.textContent = `${capitalize(itemName)} ${statusDisplay(statusCounts)}`;
+				  shoppingListDropdown.appendChild(listItem);
+				});
+			  } else {
+				shoppingListDropdown.innerHTML = '<li>No items need restocking.</li>';
+			  }
+			},
+			error: function(error) {
+			  console.error('Error parsing CSV:', error);
+			}
+		  });
+		})
+		.catch(error => console.error('Error fetching CSV:', error));
+	}
 
   document.getElementById('getRecipeButton')?.addEventListener('click', function() {
     const checkedIngredients = Array.from(selectedIngredients);

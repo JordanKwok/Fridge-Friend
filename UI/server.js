@@ -8,6 +8,7 @@ import csvParser from 'csv-parser';
 import sqlite3 from 'sqlite3';
 import http from 'http';
 import { Server } from 'socket.io';
+import fetch from 'node-fetch';
 
 dotenv.config();
 
@@ -44,6 +45,7 @@ const categoryMap = {
   "cabbage": { category: "Vegetables", shelfLife: 7 },
   "bacon": { category: "Meat", shelfLife: 14 },
   "bread": { category: "Baked Goods", shelfLife: 4 },
+  "Dark Chocolate Hazelnut Bar": { category: "Packaged Goods", shelfLife: 30 },
   "cereal": { category: "Packaged Goods", shelfLife: 30 }
 };
 
@@ -168,7 +170,23 @@ app.post('/removeIngredientDate', (req, res) => {
   });
 });
 
+// Function to fetch product name from barcode using Open Food Facts API
+async function fetchProductNameFromBarcode(barcode) {
+  const url = `https://world.openfoodfacts.org/api/v0/product/${barcode}.json`;
 
+  try {
+    const response = await fetch(url);
+    if (response.status === 200) {
+      const productData = await response.json();
+      if (productData && productData.product) {
+        return productData.product.product_name || `Unknown Product (${barcode})`;
+      }
+    }
+  } catch (error) {
+    console.error(`Error fetching product info for barcode ${barcode}:`, error);
+  }
+  return `Unknown Product (${barcode})`;
+}
 
 // Endpoint to edit an ingredient
 app.post('/editIngredient', (req, res) => {
@@ -199,17 +217,28 @@ app.post('/addIngredient', (req, res) => {
   });
 });
 
-// Endpoint to receive items with "true/false" status
-app.post('/receiveItemsStatus', (req, res) => {
-  const itemsStatus = req.body; // Example: { "Apple": true, "Banana": false }
+app.get('/getProductNameFromBarcode/:barcode', async (req, res) => {
+  const { barcode } = req.params;
+  const productName = await fetchProductNameFromBarcode(barcode);
+  res.send({ name: productName });
+});
 
-  console.log('Received items with status:', itemsStatus);
+// Endpoint to receive items with "session_start" and "items"
+app.post('/receiveItemsStatus', (req, res) => {
+  const { session_start, items } = req.body;
+
+  // Check if items is defined and is an array
+  if (!session_start || !Array.isArray(items)) {
+    console.error("Invalid 'items' or 'session_start' received in request body:", req.body);
+    return res.status(400).send('Invalid format: session_start should be defined, and items should be an array.');
+  }
+
+  console.log('Received items with session start:', session_start);
+  console.log('Received items with status:', items);
 
   // Emit the sessionComplete event to notify the client
-  // Send itemsStatus to the client so that the modal can display them as either Going IN or Going OUT
-  io.emit('sessionComplete', itemsStatus);
+  io.emit('sessionComplete', { session_start, items });
 
-  // Respond to the client indicating the items were received successfully
   res.send('Items received successfully without writing to CSV.');
 });
 
