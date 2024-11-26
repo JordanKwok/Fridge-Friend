@@ -64,19 +64,28 @@ const csvFilePath = path.join(__dirname, 'public', 'Ingredients.csv');
 function readCSV() {
   return new Promise((resolve, reject) => {
     const results = [];
-    fs.createReadStream(csvFilePath)
+    
+    // Read and normalize the file
+    const rawData = fs.readFileSync(csvFilePath, 'utf8');
+    const normalizedData = rawData.replace(/\r?\n/g, '\r\n'); // Normalize line endings
+
+    // Create a readable stream from the normalized data
+    const readableStream = require('stream').Readable.from(normalizedData);
+
+    readableStream
       .pipe(csvParser())
       .on('data', (data) => results.push(data))
       .on('end', () => resolve(results))
       .on('error', (error) => reject(error));
   });
 }
-
 // Function to write data back to CSV
 function writeCSV(data) {
-  const csvData = data.map(item => `${item.name},${item.date}`).join('\n');
+  const csvData = data.map(item => `${item.name},${item.date}`).join('\r\n');
   try {
-    fs.writeFileSync(csvFilePath, `name,date\n${csvData}`);
+    const header = 'name,date';
+    const content = `${header}\r\n${csvData}`;
+    fs.writeFileSync(csvFilePath, content.trim()); // Ensure no trailing newline
   } catch (error) {
     console.error('Error writing to CSV file:', error);
   }
@@ -136,7 +145,7 @@ app.post('/removeIngredientDate', (req, res) => {
       return;
     }
 
-    const lines = data.split('\n').filter(Boolean);
+    const lines = data.split('\r\n').filter(Boolean);
     
     // Parse the lines and filter for entries that match the ingredient
     const matchingLines = lines
@@ -159,7 +168,7 @@ app.post('/removeIngredientDate', (req, res) => {
       lines.splice(indexToRemove, 1);
     }
 
-    fs.writeFile(csvFilePath, lines.join('\n'), 'utf8', (err) => {
+    fs.writeFile(csvFilePath, lines.join('\r\n'), 'utf8', (err) => {
       if (err) {
         console.error('Error writing file:', err);
         res.status(500).send('Error writing file');
@@ -207,7 +216,7 @@ app.post('/addIngredient', (req, res) => {
   const capitalizedName = name.charAt(0).toUpperCase() + name.slice(1);
   const formattedDate = formatDate(date);
 
-  fs.appendFile(csvFilePath, `\n${capitalizedName},${formattedDate}`, 'utf8', (err) => {
+  fs.appendFile(csvFilePath, `\r\n${capitalizedName},${formattedDate}`, 'utf8', (err) => {
     if (err) {
       console.error('Error writing to file:', err);
       res.status(500).send('Error writing to file');
@@ -259,7 +268,7 @@ app.post('/addConfirmedItems', (req, res) => {
         const newLines = confirmedItems.map(item => `${item.name},${item.date}`);
 
         // Append the new lines to the existing data
-        const updatedData = data.trim() + '\n' + newLines.join('\n');
+        const updatedData = data.trim() + '\r\n' + newLines.join('\r\n');
 
         fs.writeFile(csvFilePath, updatedData, 'utf8', (err) => {
           if (err) {
@@ -295,7 +304,7 @@ app.post('/removeConfirmedItems', (req, res) => {
           return reject(err);
         }
 
-        const lines = data.trim().split('\n');
+        const lines = data.trim().split('\r\n');
         const header = lines.shift(); // Remove the header line
         const items = lines.map(line => line.split(','));
 
