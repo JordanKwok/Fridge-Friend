@@ -16,9 +16,34 @@ document.addEventListener('DOMContentLoaded', function() {
     "cereal": { category: "Packaged Goods", shelfLife: 30 }
   };
 
-  // Global elements and functions
-  const socket = io();
+  // Assuming user ID is available in some form, e.g., from localStorage
+  const userId = 'fridgefriend09';
   const BASE_URL = 'http://localhost:3000/';
+
+  // Global elements and functions
+  // const socket = io();
+  // Connect to the socket with userId as a query parameter
+  const socket = io(BASE_URL, { query: { userId } });
+  
+
+  // Add a new session to the queue if user cancels the initial review
+  socket.on('sessionComplete', function({ session_start, newItems }) {
+    if (!newItems || newItems.length === 0) {
+      console.log("No items to review, skipping session review modal.");
+      return; // Do not trigger the modal if newItems is empty
+    }
+
+    if (confirm('A session has completed. Do you want to view your items now?')) {
+      localStorage.setItem('showSessionModal', 'true');
+      localStorage.setItem('newItemsData', JSON.stringify({ session_start, newItems }));
+      window.location.href = `${BASE_URL}MyIngredients.html`;
+    } else {
+      console.log("User chose to review later.");
+      pendingSessions.push({ session_start, newItems });
+      localStorage.setItem('pendingSessions', JSON.stringify(pendingSessions));
+      updateSessionButton(pendingSessions.length);
+    }
+  });
 
   // Navigation buttons
   document.getElementById('aboutButton')?.addEventListener('click', function() {
@@ -54,20 +79,6 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     return `Unknown Product (${barcode})`;
   }
-  
-
-  // Global notification logic for session completion
-  socket.on('sessionComplete', function(newItems) {
-    alert('A session has completed. Click to review items.');
-  
-    if (confirm('Do you want to view your items now?')) {
-      localStorage.setItem('showSessionModal', 'true');
-      localStorage.setItem('newItemsData', JSON.stringify(newItems));
-      window.location.href = `${BASE_URL}MyIngredients.html`;
-    }
-  });
-  
-  
 
     const notificationBell = document.getElementById('notificationBell');
 	  const notificationSound = document.getElementById('notificationSound');
@@ -77,6 +88,11 @@ document.addEventListener('DOMContentLoaded', function() {
 	  const sessionModal = document.getElementById('sessionModal');
 	  const sessionItemsContainer = document.getElementById('sessionItems');
 	  const exitSessionReviewButton = document.getElementById('exitSessionReviewButton');
+    const sessionButton = document.getElementById('sessionButton');
+    const sessionCounter = document.getElementById('sessionCounter');
+    const sessionQueueModal = document.getElementById('sessionQueueModal');
+    const sessionQueueList = document.getElementById('sessionQueueList');
+    const closeSessionQueueModal = document.getElementById('closeSessionQueueModal');
 
 	  let notificationSoundPlayed = false;
     localStorage.removeItem('selectedIngredients');
@@ -85,10 +101,83 @@ document.addEventListener('DOMContentLoaded', function() {
 
 	  let itemsConfirmedCount = 0;
 	  let totalItems = 0;
+    
+    // Load pending sessions from localStorage
+    let pendingSessions = JSON.parse(localStorage.getItem('pendingSessions') || '[]');
+  updateSessionButton(pendingSessions.length);
+
+  function updateSessionButton(count) {
+    if (count > 0) {
+      sessionCounter.textContent = count;
+      sessionCounter.classList.remove('hidden');
+    } else {
+      sessionCounter.classList.add('hidden');
+    }
+  }
+
+    // Show the session queue modal
+    function showSessionQueueModal() {
+      if (pendingSessions.length === 0) {
+        alert('No pending sessions for review.');
+        return; // Do not open modal if there are no sessions to review
+      }
+  
+      sessionQueueList.innerHTML = '';
+  
+      pendingSessions.forEach((session, index) => {
+        const sessionEntry = document.createElement('div');
+        sessionEntry.classList.add('session-entry');
+        sessionEntry.innerHTML = `
+          <span>Session Start: ${session.session_start}</span>
+          <button data-index="${index}" class="view-session-button">View</button>
+        `;
+        sessionQueueList.appendChild(sessionEntry);
+      });
+  
+      // Attach event listeners to each "View" button
+      document.querySelectorAll('.view-session-button').forEach(button => {
+        button.addEventListener('click', function() {
+          const index = this.getAttribute('data-index');
+          const session = pendingSessions[index];
+          if (session) {
+            localStorage.setItem('showSessionModal', 'true');
+            localStorage.setItem('newItemsData', JSON.stringify(session));
+            pendingSessions.splice(index, 1);
+            localStorage.setItem('pendingSessions', JSON.stringify(pendingSessions));
+            updateSessionButton(pendingSessions.length);
+            sessionQueueModal.classList.remove('show');
+            window.location.href = `${BASE_URL}MyIngredients.html`;
+          }
+        });
+      });
+  
+      sessionQueueModal.classList.add('show');
+    }
+  
+    // Attach event listener to session button
+    sessionButton.addEventListener('click', function() {
+      if (pendingSessions.length > 0) {
+        showSessionQueueModal();
+      } else {
+        alert('No pending sessions for review.');
+      }
+    });
+  
+    // Close the session queue modal
+    closeSessionQueueModal.addEventListener('click', function() {
+      sessionQueueModal.classList.remove('show');
+    });
+  
+    // Attach close event on clicking outside the modal
+    window.addEventListener('click', function(event) {
+      if (event.target === sessionQueueModal) {
+        sessionQueueModal.classList.remove('show');
+      }
+    });
 
 	  // Check if the exitSessionReviewButton exists before setting properties
 	  if (exitSessionReviewButton) {
-		exitSessionReviewButton.disabled = true;
+		exitSessionReviewButton.disabled = false;
 	  }
 
     setInterval(fetchIngredients, 1000);
@@ -100,17 +189,32 @@ document.addEventListener('DOMContentLoaded', function() {
           Papa.parse(text, {
             header: true,
             complete: function(results) {
-              // console.log('Parsed Results:', results);
-              results.data.forEach(item => {
+              // Filter valid data entries
+              const validData = results.data.filter(item => item.name && item.date);
+    
+              validData.forEach(item => {
+                // Remove leading tabs
+                item.name = item.name.replace(/^\t+/, '').trim();
+                item.date = item.date.replace(/^\t+/, '').trim();
+    
+                // Calculate the best before date
+                let category = categoryMap[item.name.toLowerCase()];
+    
+                // If no category is found, set a default shelfLife of 14 days
+                const shelfLife = category ? category.shelfLife : 14;
+    
                 if (!item.best_before_date || item.best_before_date.trim() === "") {
-                  const category = categoryMap[item.name.toLowerCase()];
-                  if (category) {
-                    item.best_before_date = calculateBestBeforeDate(item.date, category.shelfLife);
+                  const parsedDate = new Date(item.date);
+                  if (!isNaN(parsedDate)) {
+                    item.best_before_date = calculateBestBeforeDate(parsedDate, shelfLife);
+                  } else {
+                    console.warn(`Invalid date encountered for item: ${item.name}, date: ${item.date}`);
                   }
                 }
               });
-              displayIngredients(results.data);
-              checkForExpiringItems(results.data);
+    
+              displayIngredients(validData);
+              checkForExpiringItems(validData);
             },
             error: function(error) {
               console.error('Error parsing CSV:', error);
@@ -118,8 +222,8 @@ document.addEventListener('DOMContentLoaded', function() {
           });
         })
         .catch(error => console.error('Error fetching CSV:', error));
-    }
-
+    }    
+    
     function displayIngredients(data) {
       const ingredientsList = document.getElementById('ingredientsList');
       if (!ingredientsList) {
@@ -128,26 +232,29 @@ document.addEventListener('DOMContentLoaded', function() {
       }
       ingredientsList.innerHTML = '';
       const ingredientCountMap = {};
-
+    
       data.forEach(item => {
-        if (ingredientCountMap[item.name]) {
-          ingredientCountMap[item.name].count += 1;
-          ingredientCountMap[item.name].dates.push(item.date);
-          ingredientCountMap[item.name].bestBeforeDates.push(item.best_before_date);
+        const itemName = item.name.trim().toLowerCase();
+        if (!itemName) return; // Skip invalid items
+    
+        if (ingredientCountMap[itemName]) {
+          ingredientCountMap[itemName].count += 1;
+          ingredientCountMap[itemName].dates.push(item.date);
+          ingredientCountMap[itemName].bestBeforeDates.push(item.best_before_date);
         } else {
-          ingredientCountMap[item.name] = {
+          ingredientCountMap[itemName] = {
             count: 1,
             dates: [item.date],
             bestBeforeDates: [item.best_before_date]
           };
         }
       });
-
+    
       Object.keys(ingredientCountMap).forEach(name => {
         const ingredientData = ingredientCountMap[name];
         const itemDiv = document.createElement('div');
         itemDiv.classList.add('ingredient-item');
-
+    
         const checkbox = document.createElement('input');
         checkbox.type = 'checkbox';
         checkbox.id = `ingredient-${name}`;
@@ -161,19 +268,27 @@ document.addEventListener('DOMContentLoaded', function() {
           }
           localStorage.setItem('selectedIngredients', JSON.stringify(Array.from(selectedIngredients)));
         });
-
+    
         const label = document.createElement('label');
         label.htmlFor = checkbox.id;
-        label.textContent = `${name} (${ingredientData.count})`;
-
+        label.textContent = `${capitalize(name)} (${ingredientData.count})`;
+    
         const datesContainer = document.createElement('div');
         datesContainer.classList.add('dates-container');
         datesContainer.style.display = expandedIngredients.has(name) ? 'block' : 'none';
-
+    
         ingredientData.dates.forEach((date, index) => {
+          const bestBeforeDate = ingredientData.bestBeforeDates[index];
           const dateBox = document.createElement('div');
           dateBox.classList.add('date-box');
-          dateBox.textContent = `Entry Date: ${date} | Best Before: ${ingredientData.bestBeforeDates[index]}`;
+    
+          // Ensure best before date is valid
+          if (bestBeforeDate && bestBeforeDate !== 'Invalid Date') {
+            dateBox.textContent = `Entry Date: ${date} | Best Before: ${bestBeforeDate}`;
+          } else {
+            dateBox.textContent = `Entry Date: ${date} | Best Before: Unknown`;
+          }
+    
           const dateRemoveButton = document.createElement('button');
           dateRemoveButton.classList.add('remove-button');
           dateRemoveButton.textContent = 'X';
@@ -183,7 +298,7 @@ document.addEventListener('DOMContentLoaded', function() {
           dateBox.appendChild(dateRemoveButton);
           datesContainer.appendChild(dateBox);
         });
-
+    
         const showDatesButton = document.createElement('button');
         showDatesButton.textContent = expandedIngredients.has(name) ? 'Hide' : 'Details';
         showDatesButton.classList.add('show-dates-button');
@@ -198,129 +313,87 @@ document.addEventListener('DOMContentLoaded', function() {
           }
           localStorage.setItem('expandedIngredients', JSON.stringify(Array.from(expandedIngredients)));
         });
-
+    
         itemDiv.appendChild(checkbox);
         itemDiv.appendChild(label);
         itemDiv.appendChild(showDatesButton);
         itemDiv.appendChild(datesContainer);
         ingredientsList.appendChild(itemDiv);
       });
-    }
+    }    
 
     // Global variable for storing items to be inserted/removed into the CSV
 	let itemsToInsert = [];
 	let itemsToRemove = [];
 
 	// Function to show the session review modal
-async function showSessionReviewModal(items) {
-  sessionItemsContainer.innerHTML = ''; // Clear previous items
-  itemsToInsert = []; // Clear itemsToInsert array for fresh session
-  itemsToRemove = []; // Clear itemsToRemove array for fresh session
-  const itemCounts = {};
-
-  // Wait for barcode lookups and prepare item data
-  await Promise.all(items.map(async (item) => {
-    let { name, barcode, direction } = item;
-
-    if (!name && barcode) {
-      // Fetch the name for the barcode
-      name = await fetchProductNameFromBarcode(barcode);
-    }
-
-    if (itemCounts[name]) {
-      itemCounts[name].count += 1;
-    } else {
-      itemCounts[name] = { count: 1, status: direction };
-    }
-  }));
-
-  totalItems = Object.keys(itemCounts).length; // Set totalItems count
-  itemsConfirmedCount = 0; // Reset confirmed items count
-
-  // Populate the modal with the items
-  Object.entries(itemCounts).forEach(([itemName, itemData]) => {
-    const itemRow = document.createElement('div');
-    itemRow.classList.add('item-row');
-
-    // Create a non-editable text span for the item name
-    const nameSpan = document.createElement('span');
-    nameSpan.textContent = itemName;
-    nameSpan.classList.add('item-name-span');
-
-    // Create an editable text input (hidden by default)
-    const nameInput = document.createElement('input');
-    nameInput.type = 'text';
-    nameInput.value = itemName;
-    nameInput.classList.add('item-name-input');
-    nameInput.style.display = 'none'; // Hide initially
-
-    // Create a dropdown to choose status (Going IN / Going OUT)
-    const statusDropdown = document.createElement('select');
-    const inOption = new Option('Going IN', 'in', false, itemData.status === "in");
-    const outOption = new Option('Going OUT', 'out', false, itemData.status === "out");
-    statusDropdown.append(inOption, outOption);
-    statusDropdown.classList.add('item-status-dropdown');
-
-    // Create the Edit button
-    const editButton = document.createElement('button');
-    editButton.textContent = 'Edit';
-    editButton.classList.add('edit-button');
-    editButton.addEventListener('click', () => {
-      nameSpan.style.display = 'none'; // Hide the span
-      nameInput.style.display = 'inline'; // Show the input
-      nameInput.disabled = false; // Make the input editable
-      editButton.style.display = 'none'; // Hide the Edit button
-    });
-
-    // Create the Confirm button
-    const confirmButton = document.createElement('button');
-    confirmButton.textContent = 'Confirm';
-    confirmButton.classList.add('confirm-button');
-    confirmButton.addEventListener('click', () => {
-      // Confirm the item and update the UI
-      nameInput.disabled = true; // Make the input non-editable
-      nameInput.style.display = 'none'; // Hide the input
-      nameSpan.textContent = nameInput.value.trim(); // Update the span text
-      nameSpan.style.display = 'inline'; // Show the span
-      nameSpan.classList.add('centered'); // Center the text
-      confirmButton.style.display = 'none'; // Hide the Confirm button
-      editButton.style.display = 'none'; // Hide the Edit button
-
-      // Determine the status from the dropdown and push items to respective arrays
-      const status = statusDropdown.value === 'in' ? true : false;
-
-      if (status === true) {
-        // Add item to itemsToInsert array for server submission
-        itemsToInsert.push({
-          name: nameInput.value.trim(),
-          date: formatDate(new Date()), // Use formatDate function for correct date format
-        });
-        console.log("Item added to insert array:", itemsToInsert);
-      } else if (status === false) {
-        // Add item to itemsToRemove array for server submission
-        itemsToRemove.push({
-          name: nameInput.value.trim(),
-        });
-        console.log("Item added to remove array:", itemsToRemove);
+  async function showSessionReviewModal(items) {
+    sessionItemsContainer.innerHTML = ''; // Clear previous items
+    itemsToInsert = []; // Clear itemsToInsert array for fresh session
+    itemsToRemove = []; // Clear itemsToRemove array for fresh session
+  
+    // Wait for barcode lookups and prepare item data
+    await Promise.all(items.map(async (item, index) => {
+      let { name, barcode, direction } = item;
+  
+      // Fetch the name for the barcode if the name is not available
+      if (!name && barcode) {
+        name = await fetchProductNameFromBarcode(barcode);
       }
-
-      itemsConfirmedCount++;
-      if (itemsConfirmedCount === totalItems) {
-        exitSessionReviewButton.disabled = false; // Enable Close button
-      }
-    });
-
-    // Append elements to the item row
-    itemRow.appendChild(nameSpan);
-    itemRow.appendChild(nameInput);
-    itemRow.appendChild(statusDropdown);
-    itemRow.appendChild(editButton);
-    itemRow.appendChild(confirmButton);
-    sessionItemsContainer.appendChild(itemRow);
-  });
-
-  // Show the modal
-  sessionModal.classList.add('show');
+  
+      // Create a unique identifier for each item based on its index
+      const itemIdentifier = name || barcode || `Item ${index + 1}`;
+  
+      const itemRow = document.createElement('div');
+      itemRow.classList.add('item-row');
+  
+      // Create a non-editable text span for the item name or barcode
+      const nameSpan = document.createElement('span');
+      nameSpan.textContent = `${itemIdentifier} (${direction === 'in' ? 'Going IN' : 'Going OUT'})`;
+      nameSpan.classList.add('item-name-span');
+  
+      // Create a dropdown to choose status (Going IN / Going OUT)
+      const statusDropdown = document.createElement('select');
+      const inOption = new Option('Going IN', 'in', false, direction === "in");
+      const outOption = new Option('Going OUT', 'out', false, direction === "out");
+      statusDropdown.append(inOption, outOption);
+      statusDropdown.classList.add('item-status-dropdown');
+  
+      // Create the Confirm button
+      const confirmButton = document.createElement('button');
+      confirmButton.textContent = 'Confirm';
+      confirmButton.classList.add('confirm-button');
+      confirmButton.addEventListener('click', () => {
+        // Determine the status from the dropdown and push items to respective arrays
+        const status = statusDropdown.value === 'in';
+  
+        if (status) {
+          // Add item to itemsToInsert array for server submission
+          itemsToInsert.push({
+            name: itemIdentifier,
+            date: formatDate(new Date()), // Use formatDate function for correct date format
+          });
+        } else {
+          // Add item to itemsToRemove array for server submission
+          itemsToRemove.push({
+            name: itemIdentifier,
+          });
+        }
+  
+        // Disable confirm button to indicate that this item has been confirmed
+        confirmButton.disabled = true;
+        statusDropdown.disabled = true;
+      });
+  
+      // Append elements to the item row
+      itemRow.appendChild(nameSpan);
+      itemRow.appendChild(statusDropdown);
+      itemRow.appendChild(confirmButton);
+      sessionItemsContainer.appendChild(itemRow);
+    }));
+  
+    // Show the modal
+    sessionModal.classList.add('show');  
 
 	  // Close button logic in the modal
 	  exitSessionReviewButton.addEventListener('click', function () {
@@ -333,7 +406,7 @@ async function showSessionReviewModal(items) {
 
 		  // Handle the addition of confirmed items
 		  if (itemsToInsert.length > 0) {
-			console.log("Items to add:", itemsToInsert); // Debug log to see items to be added
+			//console.log("Items to add:", itemsToInsert); // Debug log to see items to be added
 			fetch('/addConfirmedItems', {
 			  method: 'POST',
 			  headers: { 'Content-Type': 'application/json' },
@@ -341,10 +414,9 @@ async function showSessionReviewModal(items) {
 			})
 			  .then(response => {
 				if (response.ok) {
-				  console.log("Items added successfully");
-				  alert('Items have been added successfully.');
+				  //console.log("Items added successfully");
 				} else {
-				  console.error("Failed to add items");
+				  //console.error("Failed to add items");
 				  alert('Failed to add items.');
 				  addSuccess = false;
 				}
@@ -352,24 +424,23 @@ async function showSessionReviewModal(items) {
 			  .then(() => {
 				// After attempting to add items, handle removal
 				if (itemsToRemove.length > 0) {
-				  console.log("Items to remove:", itemsToRemove); // Debug log to see items to be removed
+				  //console.log("Items to remove:", itemsToRemove); // Debug log to see items to be removed
 				  return fetch('/removeConfirmedItems', {
 					method: 'POST',
 					headers: { 'Content-Type': 'application/json' },
 					body: JSON.stringify(itemsToRemove),
 				  });
 				} else {
-				  console.log("No items to remove");
+				  //console.log("No items to remove");
 				  return null; // No items to remove, so return null
 				}
 			  })
 			  .then(removeResponse => {
 				if (removeResponse) {
 				  if (removeResponse.ok) {
-					console.log("Items removed successfully");
-					alert('Items have been removed successfully.');
+					//console.log("Items removed successfully");
 				  } else {
-					console.error("Failed to remove items");
+					//console.error("Failed to remove items");
 					alert('Failed to remove items.');
 					removeSuccess = false;
 				  }
@@ -378,7 +449,7 @@ async function showSessionReviewModal(items) {
 			  .then(() => {
 				// Refresh the ingredients list only if both add and remove were successful
 				if (addSuccess && removeSuccess) {
-				  console.log("Fetching updated ingredients");
+				  //console.log("Fetching updated ingredients");
 				  fetchIngredients();
 				}
 			  })
@@ -386,9 +457,10 @@ async function showSessionReviewModal(items) {
 				console.error('Error during item operations:', error);
 				alert('An error occurred while processing your request. Please try again.');
 			  });
+
 		  } else if (itemsToRemove.length > 0) {
 			// Handle removal if there are no items to add
-			console.log("Items to remove only:", itemsToRemove);
+			//console.log("Items to remove only:", itemsToRemove);
 			fetch('/removeConfirmedItems', {
 			  method: 'POST',
 			  headers: { 'Content-Type': 'application/json' },
@@ -396,8 +468,8 @@ async function showSessionReviewModal(items) {
 			})
 			  .then(response => {
 				if (response.ok) {
-				  console.log("Items removed successfully");
-				  alert('Items have been removed successfully.');
+				  //console.log("Items removed successfully");
+				  //alert('Items have been removed successfully.');
 				  removeSuccess = true;
 				} else {
 				  console.error("Failed to remove items");
@@ -407,7 +479,7 @@ async function showSessionReviewModal(items) {
 			  })
 			  .then(() => {
 				if (removeSuccess) {
-				  console.log("Fetching updated ingredients");
+				  //console.log("Fetching updated ingredients");
 				  fetchIngredients();
 				}
 			  })
@@ -424,43 +496,54 @@ const showSessionModal = localStorage.getItem('showSessionModal');
 if (showSessionModal === 'true') {
   localStorage.removeItem('showSessionModal'); // Clear the flag
   const newItemsData = JSON.parse(localStorage.getItem('newItemsData') || '{}');
-  console.log("Retrieved items from localStorage:", newItemsData);
+  //console.log("Retrieved items from localStorage:", newItemsData);
 
   // Check if newItemsData has 'items' that is an array
-  if (newItemsData && newItemsData.items && Array.isArray(newItemsData.items)) {
-    showSessionReviewModal(newItemsData.items); // Pass only the items array to the modal
+  if (newItemsData && newItemsData.newItems && Array.isArray(newItemsData.newItems)) {
+    showSessionReviewModal(newItemsData.newItems); // Pass only the items array to the modal
   } else {
     console.error("Invalid items data for session review:", newItemsData);
   }
 }
 
-    function checkForExpiringItems(data) {
-      const today = new Date();
-      const expiringItems = [];
+  function checkForExpiringItems(data) {
+    const today = new Date();
+    const expiringItems = [];
+    let expiredCount = 0;
 
-      data.forEach(item => {
-        const bestBeforeDate = new Date(item.best_before_date);
-        const daysDiff = Math.ceil((bestBeforeDate - today) / (1000 * 3600 * 24));
+    data.forEach(item => {
+      const bestBeforeDate = new Date(item.best_before_date);
+      const daysDiff = Math.ceil((bestBeforeDate - today) / (1000 * 3600 * 24));
 
-        if (daysDiff <= 3 && daysDiff >= 0) {
-          expiringItems.push(`${item.name} (Expires in ${daysDiff} days)`);
-        } else if (daysDiff < 0) {
-          expiringItems.push(`${item.name} (Expired ${Math.abs(daysDiff)} days ago)`);
-        }
-      });
-
-      if (expiringItems.length > 0) {
-        notificationBell.classList.add('has-notifications');
-        if (!notificationSoundPlayed) {
-          notificationSound.play();
-          notificationSoundPlayed = true;
-        }
-        showDropdown(expiringItems);
-      } else {
-        notificationBell.classList.remove('has-notifications');
-        dropdownMenu.innerHTML = '';
+      if (daysDiff <= 3 && daysDiff >= 0) {
+        expiringItems.push(`${item.name} (Expires in ${daysDiff} days)`);
+        expiredCount++;
+      } else if (daysDiff < 0) {
+        expiringItems.push(`${item.name} (Expired ${Math.abs(daysDiff)} days ago)`);
+        expiredCount++;
       }
+    });
+
+    const notificationCounter = document.getElementById('notificationCounter');
+    
+    if (expiredCount > 0) {
+      notificationBell.classList.add('has-notifications');
+      if (!notificationSoundPlayed) {
+        notificationSound.play();
+        notificationSoundPlayed = true;
+      }
+      showDropdown(expiringItems);
+
+      // Show the red notification counter
+      notificationCounter.classList.remove('hidden');
+    } else {
+      notificationBell.classList.remove('has-notifications');
+      dropdownMenu.innerHTML = '';
+
+      // Hide the red notification counter
+      notificationCounter.classList.add('hidden');
     }
+  }
 
     function showDropdown(items) {
       dropdownMenu.innerHTML = items.map(item => `<li>${item}</li>`).join('');

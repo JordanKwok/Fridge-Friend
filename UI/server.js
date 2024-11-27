@@ -145,30 +145,37 @@ app.post('/removeIngredientDate', (req, res) => {
       return;
     }
 
-    const lines = data.split('\r\n').filter(Boolean);
+    // Split by lines, using a more flexible approach for newlines
+    const lines = data.split(/\r?\n/).filter(Boolean);
     
-    // Parse the lines and filter for entries that match the ingredient
+    // Parse the lines and find matching entries for the ingredient
+    let header = lines.shift(); // Remove the header line
     const matchingLines = lines
-      .slice(1) // Skip the header line
       .map((line, index) => {
         const [name, date] = line.split(',');
-        return { name: name.trim(), date: new Date(date.trim()), index: index + 1 };
+        return { name: name.trim(), date: new Date(date.trim()), index: index };
       })
       .filter(item => item.name.toLowerCase() === ingredient.toLowerCase());
 
     // If there are matching lines, find the oldest one
     if (matchingLines.length > 0) {
-      // Sort the matching lines by date in ascending order (oldest first)
+      // Sort matching lines by date (ascending order)
       matchingLines.sort((a, b) => a.date - b.date);
 
-      // Get the index of the oldest entry in the original lines array
+      // Get the index of the oldest entry
       const indexToRemove = matchingLines[0].index;
 
       // Remove the oldest line from the lines array
       lines.splice(indexToRemove, 1);
+    } else {
+      return res.status(404).send('Ingredient not found');
     }
 
-    fs.writeFile(csvFilePath, lines.join('\r\n'), 'utf8', (err) => {
+    // Add the header back and join the lines
+    const updatedData = [header, ...lines].join('\n');
+
+    // Write the updated data back to the CSV file
+    fs.writeFile(csvFilePath, updatedData, 'utf8', (err) => {
       if (err) {
         console.error('Error writing file:', err);
         res.status(500).send('Error writing file');
@@ -232,25 +239,6 @@ app.get('/getProductNameFromBarcode/:barcode', async (req, res) => {
   res.send({ name: productName });
 });
 
-// Endpoint to receive items with "session_start" and "items"
-app.post('/receiveItemsStatus', (req, res) => {
-  const { session_start, items } = req.body;
-
-  // Check if items is defined and is an array
-  if (!session_start || !Array.isArray(items)) {
-    console.error("Invalid 'items' or 'session_start' received in request body:", req.body);
-    return res.status(400).send('Invalid format: session_start should be defined, and items should be an array.');
-  }
-
-  console.log('Received items with session start:', session_start);
-  console.log('Received items with status:', items);
-
-  // Emit the sessionComplete event to notify the client
-  io.emit('sessionComplete', { session_start, items });
-
-  res.send('Items received successfully without writing to CSV.');
-});
-
 // Endpoint to receive confirmed items and write to CSV
 app.post('/addConfirmedItems', (req, res) => {
   queueOperation(() => {
@@ -297,20 +285,24 @@ app.post('/removeConfirmedItems', (req, res) => {
     return new Promise((resolve, reject) => {
       const itemsToRemove = req.body; // Expecting an array of { name } objects
 
+      if (!Array.isArray(itemsToRemove) || itemsToRemove.some(item => !item.name)) {
+        return res.status(400).send('Invalid input format. Expecting an array of objects with "name" property.');
+      }
+
       fs.readFile(csvFilePath, 'utf8', (err, data) => {
         if (err) {
           console.error('Error reading CSV file:', err);
-          res.status(500).send('Error reading CSV file');
-          return reject(err);
+          return reject(res.status(500).send('Error reading CSV file'));
         }
 
-        const lines = data.trim().split('\r\n');
+        // Split lines using a flexible approach for newlines
+        const lines = data.split(/\r?\n/).filter(Boolean);
         const header = lines.shift(); // Remove the header line
         const items = lines.map(line => line.split(','));
 
         // Iterate over each item to be removed and remove the oldest entry
         itemsToRemove.forEach(itemToRemove => {
-          const itemName = itemToRemove.name.toLowerCase();
+          const itemName = itemToRemove.name.trim().toLowerCase();
           let oldestIndex = -1;
           let oldestDate = new Date();
 
@@ -337,8 +329,7 @@ app.post('/removeConfirmedItems', (req, res) => {
         fs.writeFile(csvFilePath, updatedData, 'utf8', (err) => {
           if (err) {
             console.error('Error writing to CSV file:', err);
-            res.status(500).send('Error writing to CSV file');
-            return reject(err);
+            return reject(res.status(500).send('Error writing to CSV file'));
           }
 
           resolve('Items removed successfully.');
@@ -355,6 +346,84 @@ app.post('/removeConfirmedItems', (req, res) => {
   });
 });
 
+// In-memory notification queue
+const notificationQueue = {};
+
+// Create an object to store userId to socket mapping
+const userSockets = {};
+
+// On connection, store the socket against the userId
+io.on('connection', (socket) => {
+  // Assuming userId is passed from client during connection (e.g., via query string)
+  const userId = socket.handshake.query.userId;
+
+  if (userId) {
+    userSockets[userId] = socket;
+
+    // Handle disconnection - remove the socket from the mapping
+    socket.on('disconnect', () => {
+      delete userSockets[userId];
+    });
+  }
+});
+
+// Endpoint to trigger sessionComplete notification
+app.post('/triggerSessionComplete', (req, res) => {
+  const { userId, session_start, newItems } = req.body;
+
+  if (!userId) {
+    return res.status(400).send('User ID is required.');
+  }
+
+  const userSocket = userSockets[userId];
+
+  if (userSocket) {
+    // If the user is online, send the notification immediately
+    userSocket.emit('sessionComplete', { session_start, newItems });
+    res.status(200).send('Notification sent successfully.');
+  } else {
+    // If the user is not online, add to queue
+    queueNotification(userId, { session_start, newItems });
+    res.status(200).send('User is not online, notification has been queued.');
+  }
+});
+
+// Socket.io connection handling
+io.on('connection', (socket) => {
+  console.log('A user connected');
+  const userId = socket.handshake.query.userId; 
+
+  if (userId) {
+    // Map userId to the socket
+    userSockets[userId] = socket;
+
+    // Send any pending notifications to the user
+    if (notificationQueue[userId] && notificationQueue[userId].length > 0) {
+      notificationQueue[userId].forEach(notification => {
+        socket.emit('sessionComplete', notification);
+      });
+      // Clear the queue after sending
+      notificationQueue[userId] = [];
+    }
+  }
+
+  // Handle disconnection
+  socket.on('disconnect', () => {
+    console.log('User disconnected');
+    if (userId) {
+      delete userSockets[userId];
+    }
+  });
+});
+
+// Store a new notification in the queue if user is not active
+function queueNotification(userId, notification) {
+  if (!notificationQueue[userId]) {
+    notificationQueue[userId] = [];
+  }
+  notificationQueue[userId].push(notification);
+}
+
 // Function to format the date
 function formatDate(date) {
   const dateObj = new Date(date);
@@ -363,14 +432,6 @@ function formatDate(date) {
   const year = String(dateObj.getFullYear()).slice(-2);
   return `${month}-${day}-${year}`;
 }
-
-// Socket.io setup
-io.on('connection', (socket) => {
-  console.log('A user connected');
-  socket.on('disconnect', () => {
-    console.log('User disconnected');
-  });
-});
 
 server.listen(port, '0.0.0.0', () => {
   console.log(`Server is running on http://localhost:${port}`);

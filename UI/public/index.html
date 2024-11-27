@@ -22,9 +22,20 @@
   </div>
   <button class="invisible-button" id="aboutButton">About</button>
   <button class="invisible-button" id="contactButton">Contact Us</button>
-  
   <!-- <button id="productsButton">Our Products</button> -->
   <button id="productsButton">My Ingredients</button>
+  <div id="sessionButton" class="session-button">
+  <div id="sessionIcon" class="session-icon"></div>
+  <div id="sessionCounter" class="session-counter">0</div>
+</div>
+
+<div id="sessionQueueModal" class="modal">
+  <div class="modal-content">
+    <span id="closeSessionQueueModal" class="close-button">&times;</span>
+    <h3>Pending Sessions for Review</h3>
+    <div id="sessionQueueList"></div>
+  </div>
+</div>
   <!-- <button id="productsButton">My Recipes</button> -->
   <script src="/socket.io/socket.io.js"></script>
   <script src="script.js"></script>

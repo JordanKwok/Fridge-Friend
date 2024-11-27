@@ -139,11 +139,11 @@
 
   <button id="notificationBell" class="notification-button">
     <img src="images/notification.png" class="notification-icon" alt="Notification Bell">
+    <span id="notificationCounter" class="notification-counter hidden"></span>
     <span class="go-back-text">NOTIFY ME</span>
   </button>
 
 <ul id="notificationDropdown" class="dropdown-menu"></ul>
-
 
 <audio id="notificationSound" src="ding.wav" preload="auto"></audio>
   
@@ -165,6 +165,19 @@
     <button id="clearButton">Clear</button>
     <div id="recipeOutput"></div>
   </div>
+  <div id="sessionItemsContainer"></div>
+<div id="sessionButton" class="session-button">
+  <div id="sessionIcon" class="session-icon"></div>
+  <div id="sessionCounter" class="session-counter">0</div>
+</div>
+
+<div id="sessionQueueModal" class="modal">
+  <div class="modal-content">
+    <span id="closeSessionQueueModal" class="close-button">&times;</span>
+    <h3>Pending Sessions for Review</h3>
+    <div id="sessionQueueList"></div>
+  </div>
+</div>
 
 <div id="sessionModal" class="modal hidden">
   <h3>Session Review</h3>
